@@ -4,8 +4,10 @@ import 'package:padidja_expense_app/screens/add_users_screen.dart';
 import 'package:padidja_expense_app/screens/auth_screen.dart';
 import 'package:padidja_expense_app/screens/history_screen.dart';
 import 'package:padidja_expense_app/screens/home_screen.dart';
+import 'package:padidja_expense_app/screens/spend_line_screen.dart';
 import 'package:padidja_expense_app/screens/splash_screen.dart';
 import 'package:padidja_expense_app/screens/stats_screen.dart';
+import 'package:padidja_expense_app/screens/user_page_screen.dart';
 import 'services/database_service.dart';
 
 
@@ -41,7 +43,9 @@ class PadidjaApp extends StatelessWidget {
         '/add': (context) => const AddExpenseScreen(),
         '/stats': (context) => const StatsScreen(),
         '/history': (context) =>  HistoryScreen(),
-        '/userpage': (context) =>  UserFormPage(),
+        '/adduser': (context) =>  UserFormPage(),
+        '/userpage': (context) =>  UserListPage (),
+        'spendline': (context) =>  SpendLinePage(),
 
 
       },
