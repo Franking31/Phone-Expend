@@ -9,10 +9,12 @@ class MainDrawerWrapper extends StatefulWidget {
   State<MainDrawerWrapper> createState() => _MainDrawerWrapperState();
 }
 
-class _MainDrawerWrapperState extends State<MainDrawerWrapper> with SingleTickerProviderStateMixin {
+class _MainDrawerWrapperState extends State<MainDrawerWrapper> 
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<Offset> _drawerSlide;
   late Animation<double> _menuButtonFade;
+  late Animation<double> _overlayOpacity;
 
   bool _isDrawerOpen = false;
 
@@ -22,7 +24,7 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper> with SingleTicker
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 350),
     );
 
     _drawerSlide = Tween<Offset>(
@@ -30,12 +32,20 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper> with SingleTicker
       end: const Offset(0.0, 0),
     ).animate(CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeInOut,
+      curve: Curves.easeInOutCubic,
     ));
 
     _menuButtonFade = Tween<double>(
       begin: 1.0,
       end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    ));
+
+    _overlayOpacity = Tween<double>(
+      begin: 0.0,
+      end: 0.4,
     ).animate(CurvedAnimation(
       parent: _controller,
       curve: Curves.easeInOut,
@@ -51,7 +61,7 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper> with SingleTicker
 
   void _navigateTo(String routeName) {
     _toggleDrawer();
-    Future.delayed(const Duration(milliseconds: 250), () {
+    Future.delayed(const Duration(milliseconds: 300), () {
       Navigator.of(context).pushReplacementNamed(routeName);
     });
   }
@@ -65,111 +75,260 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper> with SingleTicker
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
 
-    return Stack(
-      children: [
-        // Main content (slidable)
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          left: _isDrawerOpen ? screenWidth * 0.6 : 0,
-          top: 0,
-          right: _isDrawerOpen ? -screenWidth * 0.6 : 0,
-          bottom: 0,
-          child: GestureDetector(
-            onTap: _isDrawerOpen ? _toggleDrawer : null,
-            child: AbsorbPointer(
-              absorbing: _isDrawerOpen,
-              child: widget.child,
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Drawer Background
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF6074F9),
+                  Color(0xFF5A6BF2),
+                ],
+              ),
             ),
           ),
-        ),
 
-        // Drawer menu
-        SlideTransition(
-          position: _drawerSlide,
-          child: Container(
-            width: screenWidth * 0.6,
-            color: const Color(0xFF6074F9),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header section aligné avec les icônes
-                Container(
-                  padding: const EdgeInsets.only(left: 20, top: 56, right: 20),
-                  child: const Text(
-                    "Menu bar",
-                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          // Main content (slidable)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOutCubic,
+            left: _isDrawerOpen ? screenWidth * 0.65 : 0,
+            top: _isDrawerOpen ? 60 : 0,
+            right: _isDrawerOpen ? -screenWidth * 0.65 : 0,
+            bottom: _isDrawerOpen ? 60 : 0,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeInOutCubic,
+              decoration: BoxDecoration(
+                borderRadius: _isDrawerOpen 
+                    ? BorderRadius.circular(20) 
+                    : BorderRadius.zero,
+                boxShadow: _isDrawerOpen 
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(-5, 0),
+                        ),
+                      ]
+                    : null,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: GestureDetector(
+                onTap: _isDrawerOpen ? _toggleDrawer : null,
+                child: AbsorbPointer(
+                  absorbing: _isDrawerOpen,
+                  child: Stack(
+                    children: [
+                      widget.child,
+                      // Overlay when drawer is open
+                      AnimatedBuilder(
+                        animation: _overlayOpacity,
+                        builder: (context, child) {
+                          return Container(
+                            color: Colors.black.withOpacity(_overlayOpacity.value),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                ),
-                // Menu items
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _drawerItem(Icons.person, "Home", '/home'),
-                        _drawerItem(Icons.account_balance_wallet, "Spend Line", '/spendline'),
-                        _drawerItem(Icons.description, "spend Form", '/add'),
-                        _drawerItem(Icons.bar_chart, "Graphique", '/stats'),
-                        _drawerItem(Icons.history, "Historique", '/history'),
-                        _drawerItem(Icons.person, "User Page", '/userpage'),
-                        _drawerItem(Icons.notifications, "Notification", '/notification'),
-                        _drawerItem(Icons.settings, "Settings", '/settings'),
-                        _drawerItem(Icons.logout, "LogOut", '/logout'),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // Menu button
-        Positioned(
-          top: 40,
-          left: 16,
-          child: FadeTransition(
-            opacity: _menuButtonFade,
-            child: ScaleTransition(
-              scale: _menuButtonFade,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.menu, color: Colors.white, size: 28),
-                  onPressed: _isDrawerOpen ? null : _toggleDrawer,
                 ),
               ),
             ),
           ),
-        ),
-      ],
+
+          // Drawer menu
+          SlideTransition(
+            position: _drawerSlide,
+            child: Container(
+              width: screenWidth * 0.75,
+              height: screenHeight,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF6074F9),
+                    Color(0xFF5A6BF2),
+                  ],
+                ),
+              ),
+              child: SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header section
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 30),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                            child: const Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Menu bar",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                "Navigation",
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Menu items
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          children: [
+                            _drawerItem(Icons.home_rounded, "Home", '/home'),
+                            _drawerItem(Icons.account_balance_wallet_rounded, "Spend Line", '/spendline'),
+                            _drawerItem(Icons.description_rounded, "Spend Form", '/add'),
+                            _drawerItem(Icons.bar_chart_rounded, "Graphique", '/stats'),
+                            _drawerItem(Icons.history_rounded, "Historique", '/history'),
+                            _drawerItem(Icons.person_rounded, "User Page", '/userpage'),
+                            _drawerItem(Icons.notifications_rounded, "Notification", '/notification'),
+                            _drawerItem(Icons.settings_rounded, "Settings", '/settings'),
+                            const SizedBox(height: 20),
+                            const Divider(color: Colors.white24, thickness: 1),
+                            const SizedBox(height: 10),
+                            _drawerItem(Icons.logout_rounded, "LogOut", '/logout', isLogout: true),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Menu button
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 16,
+            child: FadeTransition(
+              opacity: _menuButtonFade,
+              child: ScaleTransition(
+                scale: _menuButtonFade,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.2),
+                      width: 1,
+                    ),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _isDrawerOpen ? null : _toggleDrawer,
+                      child: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Icon(
+                          Icons.menu_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _drawerItem(IconData icon, String label, String route) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: TextButton(
-        onPressed: () => _navigateTo(route),
-        style: TextButton.styleFrom(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.white, size: 24),
-            const SizedBox(width: 16),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
+  Widget _drawerItem(IconData icon, String label, String route, {bool isLogout = false}) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: Colors.transparent,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _navigateTo(route),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: isLogout 
+                        ? Colors.red.withOpacity(0.2) 
+                        : Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: isLogout ? Colors.red[300] : Colors.white,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: isLogout ? Colors.red[300] : Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: isLogout 
+                      ? Colors.red[300]!.withOpacity(0.6) 
+                      : Colors.white.withOpacity(0.6),
+                  size: 16,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
