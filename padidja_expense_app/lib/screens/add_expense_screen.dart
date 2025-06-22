@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
 
-
 class AddExpenseScreen extends StatefulWidget {
   const AddExpenseScreen({super.key});
 
@@ -38,80 +37,186 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
     return MainDrawerWrapper(
       child: Scaffold(
-        body: Stack(
+        backgroundColor: Colors.grey[100],
+        body: Column(
           children: [
-            Column(
-              children: [
-                Container(
-                  height: 150,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF6074F9),
-                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Le bouton menu est maintenant géré par MainDrawerWrapper
-                        const SizedBox(width: 56), // Espace pour le bouton menu du wrapper
-                        const Icon(Icons.notifications, color: Colors.white, size: 28),
-                      ],
-                    ),
-                  ),
+            // Header avec courbe
+            Container(
+              height: 200,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF6074F9), Color(0xFF6074F9)],
                 ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(50),
+                  bottomRight: Radius.circular(50),
+                ),
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      // Barre de navigation
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.arrow_back, color: Colors.black),
-                                onPressed: () => Navigator.pop(context),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: IconButton(
+                              onPressed: () {
+                                // Action notification
+                              },
+                              icon: const Icon(
+                                Icons.notifications_outlined,
+                                color: Colors.white,
+                                size: 24,
                               ),
-                              const Text(
-                                "Add Spend Line",
-                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          _buildField("Line Name", _lineNameController),
-                          const SizedBox(height: 15),
-                          _buildField("Description", _descriptionController),
-                          const SizedBox(height: 15),
-                          _buildField("Budget", _budgetController, keyboard: TextInputType.number),
-                          const SizedBox(height: 15),
-                          _buildFieldWithIcon("Proof", _proofController, Icons.download),
-                          const SizedBox(height: 15),
-                          _buildFieldWithIcon("Time", TextEditingController(text: DateFormat('dd/MM/yyyy').format(_selectedDate)), Icons.calendar_today, onTap: _selectDate),
-                          const SizedBox(height: 30),
-                          ElevatedButton(
-                            onPressed: () {
-                              if (_formKey.currentState!.validate()) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("Spend Line added (fictif) ✅")),
-                                );
-                              }
-                            },
-                            child: const Text("ADD", style: TextStyle(fontSize: 16, color: Colors.white)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: themeColor,
-                              minimumSize: const Size(double.infinity, 50),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                           ),
                         ],
                       ),
+
+                      const SizedBox(height: 30),
+
+                      // Titre avec bouton de retour
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.arrow_back,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          const Text(
+                            'Add Spend Line',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Contenu du formulaire
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Champ Line Name
+                        _buildField(
+                          controller: _lineNameController,
+                          hintText: 'Line Name',
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Champ Description
+                        _buildField(
+                          controller: _descriptionController,
+                          hintText: 'Description',
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Champ Budget
+                        _buildField(
+                          controller: _budgetController,
+                          hintText: 'Budget',
+                          keyboard: TextInputType.number,
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Champ Proof
+                        _buildFieldWithIcon(
+                          controller: _proofController,
+                          hintText: 'Proof',
+                          icon: Icons.download,
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Champ Time
+                        _buildFieldWithIcon(
+                          controller: TextEditingController(
+                            text: DateFormat('dd/MM/yyyy').format(_selectedDate),
+                          ),
+                          hintText: 'Time',
+                          icon: Icons.calendar_today,
+                          onTap: _selectDate,
+                        ),
+
+                        const SizedBox(height: 40),
+
+                        // Bouton ADD
+                        SizedBox(
+                          width: 120,
+                          height: 45,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (_formKey.currentState!.validate()) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Spend Line added (fictif) ✅'),
+                                  ),
+                                );
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: themeColor,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(25),
+                              ),
+                              elevation: 3,
+                            ),
+                            child: const Text(
+                              'ADD',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
           ],
         ),
@@ -119,33 +224,97 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller, {TextInputType keyboard = TextInputType.text}) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboard,
-      validator: (value) => (value == null || value.isEmpty) ? 'This field is required' : null,
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        filled: true,
-        fillColor: Colors.pink[50],
+  Widget _buildField({
+    required TextEditingController controller,
+    required String hintText,
+    TextInputType keyboard = TextInputType.text,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF6074F9).withOpacity(0.2),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.08),
+            spreadRadius: 1,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboard,
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: TextStyle(color: Colors.grey[600], fontSize: 16),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        ),
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return 'This field is required';
+          }
+          return null;
+        },
       ),
     );
   }
 
-  Widget _buildFieldWithIcon(String label, TextEditingController controller, IconData icon, {VoidCallback? onTap}) {
-    return TextFormField(
-      controller: controller,
-      readOnly: true,
-      onTap: onTap,
-      validator: (value) => (value == null || value.isEmpty) ? 'This field is required' : null,
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        filled: true,
-        fillColor: Colors.pink[50],
-        suffixIcon: Icon(icon),
+  Widget _buildFieldWithIcon({
+    required TextEditingController controller,
+    required String hintText,
+    required IconData icon,
+    VoidCallback? onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF6074F9).withOpacity(0.2),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.08),
+            spreadRadius: 1,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextFormField(
+        controller: controller,
+        readOnly: true,
+        onTap: onTap,
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: TextStyle(color: Colors.grey[600], fontSize: 16),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          suffixIcon: Icon(icon, color: Colors.grey[600]),
+        ),
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return 'This field is required';
+          }
+          return null;
+        },
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _lineNameController.dispose();
+    _descriptionController.dispose();
+    _budgetController.dispose();
+    _proofController.dispose();
+    super.dispose();
   }
 }

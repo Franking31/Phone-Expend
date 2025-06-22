@@ -1,39 +1,59 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
-
+import 'add_expense_screen.dart'; // Import ajouté pour accéder à AddExpenseScreen
 
 class SpendLinePage extends StatefulWidget {
+  const SpendLinePage({super.key});
+
   @override
-  _SpendLinePageState createState() => _SpendLinePageState();
+  State<SpendLinePage> createState() => _SpendLinePageState();
 }
 
 class _SpendLinePageState extends State<SpendLinePage> {
   final TextEditingController _searchController = TextEditingController();
 
   final List<String> spendLines = [
-    'Ligne budgétaire',
-    'Ligne budgétaire',
-    'Ligne budgétaire',
-    'Ligne budgétaire',
-    'Ligne budgétaire',
-    'Ligne budgétaire',
+    'Budget Line - Food',
+    'Budget Line - Transportation',
+    'Budget Line - Housing',
+    'Budget Line - Entertainment',
+    'Budget Line - Health',
+    'Budget Line - Education',
   ];
+
+  List<String> filteredSpendLines = [];
+
+  @override
+  void initState() {
+    super.initState();
+    filteredSpendLines = List.from(spendLines);
+    _searchController.addListener(_filterSpendLines);
+  }
+
+  void _filterSpendLines() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      filteredSpendLines = spendLines
+          .where((line) => line.toLowerCase().contains(query))
+          .toList();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MainDrawerWrapper(
       child: Scaffold(
-        backgroundColor: Colors.grey[200],
+        backgroundColor: Colors.grey[100],
         body: Column(
           children: [
-            // Header avec courbe bleue
+            // Header avec courbe
             Container(
               height: 200,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
+                  colors: [Color(0xFF6074F9), Color(0xFF6074F9)],
                 ),
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(50),
@@ -42,23 +62,33 @@ class _SpendLinePageState extends State<SpendLinePage> {
               ),
               child: SafeArea(
                 child: Padding(
-                  padding: EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
                       // Barre de navigation
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          // Notification bell
-                          Icon(
-                            Icons.notifications,
-                            color: Colors.white,
-                            size: 28,
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: IconButton(
+                              onPressed: () {
+                                // Action notification
+                              },
+                              icon: const Icon(
+                                Icons.notifications_outlined,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
                           ),
                         ],
                       ),
 
-                      SizedBox(height: 30),
+                      const SizedBox(height: 30),
 
                       // Barre de recherche et filtre
                       Row(
@@ -77,12 +107,13 @@ class _SpendLinePageState extends State<SpendLinePage> {
                               ),
                               child: TextField(
                                 controller: _searchController,
-                                decoration: InputDecoration(
-                                  hintText: '',
+                                decoration: const InputDecoration(
+                                  hintText: 'Search a line...',
                                   hintStyle: TextStyle(color: Colors.white70),
                                   border: InputBorder.none,
                                   contentPadding: EdgeInsets.symmetric(
                                     horizontal: 20,
+                                    vertical: 12,
                                   ),
                                   suffixIcon: Icon(
                                     Icons.search,
@@ -90,12 +121,12 @@ class _SpendLinePageState extends State<SpendLinePage> {
                                     size: 20,
                                   ),
                                 ),
-                                style: TextStyle(color: Colors.white),
+                                style: const TextStyle(color: Colors.white),
                               ),
                             ),
                           ),
 
-                          SizedBox(width: 15),
+                          const SizedBox(width: 15),
 
                           // Bouton filtre
                           Container(
@@ -109,10 +140,15 @@ class _SpendLinePageState extends State<SpendLinePage> {
                                 width: 1,
                               ),
                             ),
-                            child: Icon(
-                              Icons.tune,
-                              color: Colors.white,
-                              size: 20,
+                            child: IconButton(
+                              onPressed: () {
+                                // Action filtre
+                              },
+                              icon: const Icon(
+                                Icons.tune,
+                                color: Colors.white,
+                                size: 20,
+                              ),
                             ),
                           ),
                         ],
@@ -126,70 +162,112 @@ class _SpendLinePageState extends State<SpendLinePage> {
             // Contenu principal
             Expanded(
               child: Padding(
-                padding: EdgeInsets.all(20),
+                padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
                     // Bouton ADD
-                    Container(
+                    SizedBox(
                       width: 120,
                       height: 45,
                       child: ElevatedButton(
                         onPressed: () {
-                          // Logique d'ajout
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Nouvelle ligne budgétaire ajoutée!',
-                              ),
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const AddExpenseScreen(),
                             ),
                           );
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFF4A90E2),
+                          backgroundColor: const Color(0xFF6074F9),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(25),
                           ),
                           elevation: 3,
                         ),
-                        child: Text(
+                        child: const Text(
                           'ADD',
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
                     ),
 
-                    SizedBox(height: 25),
+                    const SizedBox(height: 25),
 
-                    // Titre de la liste
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Spend line list',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
+                    // Titre de la liste avec compteur
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Budget Lines List',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6074F9).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '${filteredSpendLines.length}',
+                            style: const TextStyle(
+                              color: Color(0xFF6074F9),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
 
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
                     // Liste des lignes budgétaires
                     Expanded(
-                      child: ListView.builder(
-                        itemCount: spendLines.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: EdgeInsets.only(bottom: 15),
-                            child: _buildSpendLineItem(spendLines[index]),
-                          );
-                        },
-                      ),
+                      child: filteredSpendLines.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.search_off,
+                                    size: 64,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _searchController.text.isEmpty
+                                        ? 'No budget lines'
+                                        : 'No results found',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: filteredSpendLines.length,
+                              itemBuilder: (context, index) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _buildSpendLineItem(
+                                    filteredSpendLines[index],
+                                  ),
+                                );
+                              },
+                            ),
                     ),
                   ],
                 ),
@@ -203,76 +281,109 @@ class _SpendLinePageState extends State<SpendLinePage> {
 
   Widget _buildSpendLineItem(String title) {
     return Container(
-      height: 60,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Color(0xFF4A90E2).withOpacity(0.3), width: 1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF6074F9).withOpacity(0.2),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withOpacity(0.08),
             spreadRadius: 1,
-            blurRadius: 3,
-            offset: Offset(0, 1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 20),
-        child: Row(
-          children: [
-            // Texte de la ligne budgétaire
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-              ),
-            ),
-
-            // Icônes d'action
-            Row(
-              mainAxisSize: MainAxisSize.min,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            // Action au tap sur l'item
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                // Icône d'édition
-                GestureDetector(
-                  onTap: () {
-                    // Action d'édition
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Éditer la ligne budgétaire')),
-                    );
-                  },
-                  child: Container(
-                    padding: EdgeInsets.all(8),
-                    child: Icon(
-                      Icons.edit_outlined,
-                      size: 20,
-                      color: Colors.grey[700],
+                // Icône de la ligne budgétaire
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6074F9).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.account_balance_wallet_outlined,
+                    color: Color(0xFF6074F9),
+                    size: 20,
+                  ),
+                ),
+
+                const SizedBox(width: 16),
+
+                // Texte de la ligne budgétaire
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
                     ),
                   ),
                 ),
 
-                SizedBox(width: 10),
-
-                // Icône de partage
-                GestureDetector(
-                  onTap: () {
-                    // Action de partage
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Partager la ligne budgétaire')),
-                    );
-                  },
-                  child: Container(
-                    padding: EdgeInsets.all(8),
-                    child: Icon(
-                      Icons.share_outlined,
-                      size: 20,
-                      color: Colors.grey[700],
+                // Icônes d'action
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Icône d'édition
+                    IconButton(
+                      onPressed: () {
+                        // TODO: Add edit functionality later
+                      },
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        size: 20,
+                        color: Color(0xFF6074F9),
+                      ),
+                      tooltip: 'Edit',
                     ),
-                  ),
+
+                    // Icône de partage
+                    IconButton(
+                      onPressed: () {
+                        // TODO: Add share functionality later
+                      },
+                      icon: const Icon(
+                        Icons.share_outlined,
+                        size: 20,
+                        color: Colors.green,
+                      ),
+                      tooltip: 'Share',
+                    ),
+
+                    // Icône de suppression
+                    IconButton(
+                      onPressed: () {
+                        // TODO: Add delete functionality later
+                      },
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        size: 20,
+                        color: Colors.red,
+                      ),
+                      tooltip: 'Delete',
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );

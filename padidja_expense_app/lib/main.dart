@@ -46,7 +46,7 @@ class PadidjaApp extends StatelessWidget {
         '/history': (context) =>  HistoryScreen(),
         '/adduser': (context) =>  UserFormPage(),
         '/userpage': (context) =>  UserListPage (),
-        'spendline': (context) =>  SpendLinePage(),
+        '/spendline': (context) =>  SpendLinePage(),
         '/settings': (context) =>  const SettingsPage(),
 
 

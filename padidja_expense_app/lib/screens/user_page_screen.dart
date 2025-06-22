@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:padidja_expense_app/screens/add_users_screen.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
-
 
 class UserListPage extends StatefulWidget {
   @override
@@ -11,30 +11,48 @@ class _UserListPageState extends State<UserListPage> {
   final TextEditingController _searchController = TextEditingController();
 
   final List<String> users = [
-    'User',
-    'User',
-    'User',
-    'User',
-    'User',
-    'User',
-    'User',
+    'User 1',
+    'User 2',
+    'User 3',
+    'User 4',
+    'User 5',
+    'User 6',
+    'User 7',
   ];
+
+  List<String> filteredUsers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    filteredUsers = List.from(users);
+    _searchController.addListener(_filterUsers);
+  }
+
+  void _filterUsers() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      filteredUsers = users
+          .where((user) => user.toLowerCase().contains(query))
+          .toList();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MainDrawerWrapper(
       child: Scaffold(
-        backgroundColor: Colors.grey[200],
+        backgroundColor: Colors.grey[100],
         body: Column(
           children: [
-            // Header avec courbe bleue
+            // Header avec courbe
             Container(
               height: 200,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
+                  colors: [Color(0xFF6074F9), Color(0xFF6074F9)],
                 ),
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(50),
@@ -43,23 +61,33 @@ class _UserListPageState extends State<UserListPage> {
               ),
               child: SafeArea(
                 child: Padding(
-                  padding: EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
                       // Barre de navigation
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          // Notification bell
-                          Icon(
-                            Icons.notifications,
-                            color: Colors.white,
-                            size: 28,
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: IconButton(
+                              onPressed: () {
+                                // Action notification
+                              },
+                              icon: const Icon(
+                                Icons.notifications_outlined,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
                           ),
                         ],
                       ),
 
-                      SizedBox(height: 30),
+                      const SizedBox(height: 30),
 
                       // Barre de recherche et filtre
                       Row(
@@ -78,12 +106,13 @@ class _UserListPageState extends State<UserListPage> {
                               ),
                               child: TextField(
                                 controller: _searchController,
-                                decoration: InputDecoration(
-                                  hintText: '',
+                                decoration: const InputDecoration(
+                                  hintText: 'Search a user...',
                                   hintStyle: TextStyle(color: Colors.white70),
                                   border: InputBorder.none,
                                   contentPadding: EdgeInsets.symmetric(
                                     horizontal: 20,
+                                    vertical: 12,
                                   ),
                                   suffixIcon: Icon(
                                     Icons.search,
@@ -91,12 +120,12 @@ class _UserListPageState extends State<UserListPage> {
                                     size: 20,
                                   ),
                                 ),
-                                style: TextStyle(color: Colors.white),
+                                style: const TextStyle(color: Colors.white),
                               ),
                             ),
                           ),
 
-                          SizedBox(width: 15),
+                          const SizedBox(width: 15),
 
                           // Bouton filtre
                           Container(
@@ -110,10 +139,15 @@ class _UserListPageState extends State<UserListPage> {
                                 width: 1,
                               ),
                             ),
-                            child: Icon(
-                              Icons.tune,
-                              color: Colors.white,
-                              size: 20,
+                            child: IconButton(
+                              onPressed: () {
+                                // Action filtre
+                              },
+                              icon: const Icon(
+                                Icons.tune,
+                                color: Colors.white,
+                                size: 20,
+                              ),
                             ),
                           ),
                         ],
@@ -126,71 +160,116 @@ class _UserListPageState extends State<UserListPage> {
 
             // Contenu principal
             Expanded(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    // Bouton ADD
-                    Container(
-                      width: 120,
-                      height: 45,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          // Navigation vers la page d'ajout d'utilisateur
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Ajouter un nouvel utilisateur'),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      // Bouton ADD
+                      SizedBox(
+                        width: 120,
+                        height: 45,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => UserFormPage(),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF6074F9),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(25),
                             ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFF4A90E2),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
+                            elevation: 3,
                           ),
-                          elevation: 3,
-                        ),
-                        child: Text(
-                          'ADD',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                          child: const Text(
+                            'ADD',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
-                    ),
 
-                    SizedBox(height: 25),
+                      const SizedBox(height: 25),
 
-                    // Titre de la liste
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'User list',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
+                      // Titre de la liste avec compteur
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'User List',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF6074F9).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${filteredUsers.length}',
+                              style: const TextStyle(
+                                color: Color(0xFF6074F9),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
 
-                    SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    // Liste des utilisateurs
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: users.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: EdgeInsets.only(bottom: 15),
-                            child: _buildUserItem(users[index]),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                      // Liste des utilisateurs
+                      filteredUsers.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.search_off,
+                                    size: 64,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _searchController.text.isEmpty
+                                        ? 'No users'
+                                        : 'No results found',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: filteredUsers.length,
+                              itemBuilder: (context, index) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _buildUserItem(filteredUsers[index]),
+                                );
+                              },
+                            ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -202,50 +281,113 @@ class _UserListPageState extends State<UserListPage> {
 
   Widget _buildUserItem(String userName) {
     return Container(
-      height: 60,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Color(0xFF4A90E2).withOpacity(0.3), width: 1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF6074F9).withOpacity(0.2),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withOpacity(0.08),
             spreadRadius: 1,
-            blurRadius: 3,
-            offset: Offset(0, 1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 20),
-        child: Row(
-          children: [
-            // Texte utilisateur
-            Expanded(
-              child: Text(
-                userName,
-                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-              ),
-            ),
-
-            // Icône d'édition
-            GestureDetector(
-              onTap: () {
-                // Action d'édition de l'utilisateur
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Éditer l\'utilisateur: $userName')),
-                );
-              },
-              child: Container(
-                padding: EdgeInsets.all(8),
-                child: Icon(
-                  Icons.edit_outlined,
-                  size: 22,
-                  color: Colors.grey[700],
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            // Action au tap sur l'item
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Icône utilisateur
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6074F9).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.person_outline,
+                    color: Color(0xFF6074F9),
+                    size: 20,
+                  ),
                 ),
-              ),
+
+                const SizedBox(width: 16),
+
+                // Texte utilisateur
+                Expanded(
+                  child: Text(
+                    userName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+
+                // Icônes d'action
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Icône d'édition
+                    IconButton(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Éditer l\'utilisateur: $userName'),
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        size: 20,
+                        color: Color(0xFF6074F9),
+                      ),
+                      tooltip: 'Edit',
+                    ),
+
+                    // Icône de partage
+                    IconButton(
+                      onPressed: () {
+                        // TODO: Add share functionality later
+                      },
+                      icon: const Icon(
+                        Icons.share_outlined,
+                        size: 20,
+                        color: Colors.green,
+                      ),
+                      tooltip: 'Share',
+                    ),
+
+                    // Icône de suppression
+                    IconButton(
+                      onPressed: () {
+                        // TODO: Add delete functionality later
+                      },
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        size: 20,
+                        color: Colors.red,
+                      ),
+                      tooltip: 'Delete',
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
