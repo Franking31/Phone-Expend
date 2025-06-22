@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:padidja_expense_app/models/spend_line.dart';
+import 'package:padidja_expense_app/services/spend_line_database.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
+import 'package:padidja_expense_app/widgets/notification_button.dart';
+
 
 class AddExpenseScreen extends StatefulWidget {
   const AddExpenseScreen({super.key});
@@ -63,22 +67,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: IconButton(
-                              onPressed: () {
-                                // Action notification
-                              },
-                              icon: const Icon(
-                                Icons.notifications_outlined,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                          ),
+                          buildNotificationAction(context), // Remplacement par buildNotificationAction
                         ],
                       ),
 
@@ -186,15 +175,26 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                           width: 120,
                           height: 45,
                           child: ElevatedButton(
-                            onPressed: () {
+                            onPressed: () async {
                               if (_formKey.currentState!.validate()) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Spend Line added (fictif) ✅'),
-                                  ),
+                                final line = SpendLine(
+                                  name: _lineNameController.text.trim(),
+                                  description: _descriptionController.text.trim(),
+                                  budget: double.tryParse(_budgetController.text) ?? 0,
+                                  proof: _proofController.text.trim(),
+                                  date: _selectedDate,
                                 );
+
+                                await SpendLineDatabase.instance.insert(line);
+
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Ligne de dépense ajoutée ✅')),
+                                );
+                                Navigator.pop(context);
                               }
                             },
+
                             style: ElevatedButton.styleFrom(
                               backgroundColor: themeColor,
                               foregroundColor: Colors.white,

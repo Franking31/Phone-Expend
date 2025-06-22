@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../widgets/main_drawer_wrapper.dart';
+
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -26,11 +28,11 @@ class HomeScreen extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  // Seulement le bouton notification (le menu est géré par MainDrawerWrapper)
+                  // Bouton notification
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      const Icon(Icons.notifications, color: Colors.white, size: 28),
+                      buildNotificationAction(context), // Remplacement par buildNotificationAction
                     ],
                   ),
                   const SizedBox(height: 30),

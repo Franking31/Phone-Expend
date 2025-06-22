@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/screens/add_users_screen.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
+import 'package:padidja_expense_app/widgets/notification_button.dart';
+
 
 class UserListPage extends StatefulWidget {
   @override
@@ -68,22 +70,7 @@ class _UserListPageState extends State<UserListPage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: IconButton(
-                              onPressed: () {
-                                // Action notification
-                              },
-                              icon: const Icon(
-                                Icons.notifications_outlined,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                          ),
+                          buildNotificationAction(context), // Remplacement par buildNotificationAction
                         ],
                       ),
 

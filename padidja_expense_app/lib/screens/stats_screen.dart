@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../widgets/main_drawer_wrapper.dart';
+
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -19,146 +21,146 @@ class _StatsScreenState extends State<StatsScreen> {
     return MainDrawerWrapper(
       child: Scaffold(
         backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              Container(
-                height: 150,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF6074F9),
-                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Le bouton menu est maintenant géré par MainDrawerWrapper
-                      const SizedBox(width: 48), // Espace pour le bouton menu du wrapper
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              Icons.bar_chart,
-                              color: isBarChart ? Colors.white : Colors.white60,
-                              size: 24,
+        body: Stack(
+          children: [
+            Column(
+              children: [
+                Container(
+                  height: 150,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF6074F9),
+                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Le bouton menu est maintenant géré par MainDrawerWrapper
+                        const SizedBox(width: 48), // Espace pour le bouton menu du wrapper
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                Icons.bar_chart,
+                                color: isBarChart ? Colors.white : Colors.white60,
+                                size: 24,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  isBarChart = true;
+                                });
+                              },
                             ),
-                            onPressed: () {
-                              setState(() {
-                                isBarChart = true;
-                              });
-                            },
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.pie_chart,
-                              color: !isBarChart ? Colors.white : Colors.white60,
-                              size: 24,
+                            IconButton(
+                              icon: Icon(
+                                Icons.pie_chart,
+                                color: !isBarChart ? Colors.white : Colors.white60,
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  isBarChart = false;
+                                });
+                              },
                             ),
-                            onPressed: () {
-                              setState(() {
-                                isBarChart = false;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                      const Icon(Icons.notifications, color: Colors.white, size: 28),
-                    ],
+                          ],
+                        ),
+                        buildNotificationAction(context), // Remplacement par buildNotificationAction
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Budget",
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 10),
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text("Daily", style: TextStyle(color: Colors.grey)),
-                          Text("Weekly", style: TextStyle(color: Colors.grey)),
-                          Text("Monthly", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                          Text("Yearly", style: TextStyle(color: Colors.grey)),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        height: 200,
-                        child: isBarChart ? _buildBarChart() : _buildPieChart(),
-                      ),
-                      if (isBarChart) ...[
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Budget",
+                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                        ),
                         const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        const Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Icon(Icons.circle, color: Colors.blue, size: 12),
-                            const SizedBox(width: 5),
-                            const Text("Budget"),
-                            const SizedBox(width: 10),
-                            Icon(Icons.circle, color: Colors.blue.shade200, size: 12),
-                            const SizedBox(width: 5),
-                            const Text("Cost"),
+                            Text("Daily", style: TextStyle(color: Colors.grey)),
+                            Text("Weekly", style: TextStyle(color: Colors.grey)),
+                            Text("Monthly", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                            Text("Yearly", style: TextStyle(color: Colors.grey)),
                           ],
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          height: 200,
+                          child: isBarChart ? _buildBarChart() : _buildPieChart(),
+                        ),
+                        if (isBarChart) ...[
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.circle, color: Colors.blue, size: 12),
+                              const SizedBox(width: 5),
+                              const Text("Budget"),
+                              const SizedBox(width: 10),
+                              Icon(Icons.circle, color: Colors.blue.shade200, size: 12),
+                              const SizedBox(width: 5),
+                              const Text("Cost"),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 20),
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: primaryColor,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "February",
+                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                              const SizedBox(height: 10),
+                              _detailItem("Budget", "\$3,850"),
+                              _detailItem("Cost", "\$1,235"),
+                              _detailItem("Save", "\$2,615"),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Container(
+                          padding: const EdgeInsets.all(15),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade100,
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text("Monthly Goal"),
+                              SizedBox(width: 10),
+                              Text("Achieved Successfully", style: TextStyle(fontWeight: FontWeight.bold)),
+                              SizedBox(width: 10),
+                              Icon(Icons.circle, color: Colors.grey, size: 12),
+                            ],
+                          ),
                         ),
                       ],
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: primaryColor,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "February",
-                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-                            ),
-                            const SizedBox(height: 10),
-                            _detailItem("Budget", "\$3,850"),
-                            _detailItem("Cost", "\$1,235"),
-                            _detailItem("Save", "\$2,615"),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade100,
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text("Monthly Goal"), // Correction de l'orthographe
-                            SizedBox(width: 10),
-                            Text("Achieved Successfully", style: TextStyle(fontWeight: FontWeight.bold)), // Correction de l'orthographe
-                            SizedBox(width: 10),
-                            Icon(Icons.circle, color: Colors.grey, size: 12),
-                          ],
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildBarChart() {
     return BarChart(
@@ -260,7 +262,7 @@ class _StatsScreenState extends State<StatsScreen> {
             titleStyle: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: Colors.black,
             ),
           ),
           PieChartSectionData(
