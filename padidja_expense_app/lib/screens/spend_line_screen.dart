@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
-import 'add_expense_screen.dart'; // Import ajouté pour accéder à AddExpenseScreen
+import 'package:padidja_expense_app/widgets/notification_button.dart';
+import 'add_expense_screen.dart';
+
 
 class SpendLinePage extends StatefulWidget {
   const SpendLinePage({super.key});
@@ -69,22 +71,7 @@ class _SpendLinePageState extends State<SpendLinePage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: IconButton(
-                              onPressed: () {
-                                // Action notification
-                              },
-                              icon: const Icon(
-                                Icons.notifications_outlined,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                          ),
+                          buildNotificationAction(context), // Utilisation de la fonction
                         ],
                       ),
 

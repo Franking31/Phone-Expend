@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
+import 'package:padidja_expense_app/widgets/notification_button.dart';
+
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -12,7 +14,7 @@ class _NotificationPageState extends State<NotificationPage> {
   final List<Map<String, String>> notifications = [
     {'title': 'Budget Exceeded', 'description': 'Your Food budget exceeded on 22/06/2025'},
     {'title': 'New User Added', 'description': 'User John Doe added on 21/06/2025'},
-    {'title': 'Expense Approved', 'description': 'Transportation expense approved on 20/06/2025'},
+    {'title': 'Expense Updated', 'description': 'Transportation expense approved on 20/06/2025'},
     {'title': 'Reminder', 'description': 'Review your Health budget by 23/06/2025'},
     {'title': 'System Update', 'description': 'App updated on 19/06/2025'},
   ];
@@ -53,43 +55,9 @@ class _NotificationPageState extends State<NotificationPage> {
                     children: [
                       // Barre de navigation
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          GestureDetector(
-                            onTap: () => Navigator.pop(context),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.3),
-                                  width: 1,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.arrow_back,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: IconButton(
-                              onPressed: () {
-                                // Action notification (peut-être marquer toutes les notifications comme lues)
-                              },
-                              icon: const Icon(
-                                Icons.notifications_outlined,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                          ),
+                          buildNotificationAction(context), // Bouton de notification
                         ],
                       ),
 
