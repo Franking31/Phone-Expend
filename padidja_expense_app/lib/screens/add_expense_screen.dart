@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 import 'package:padidja_expense_app/models/spend_line.dart';
 import 'package:padidja_expense_app/services/spend_line_database.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
-
 
 class AddExpenseScreen extends StatefulWidget {
   const AddExpenseScreen({super.key});
@@ -20,6 +21,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final _budgetController = TextEditingController();
   final _proofController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
+  
+  // Variables pour les documents
+  List<File> _selectedFiles = [];
 
   void _selectDate() async {
     final picked = await showDatePicker(
@@ -33,6 +37,60 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         _selectedDate = picked;
       });
     }
+  }
+
+  // Fonction pour sélectionner des fichiers documents
+  Future<void> _pickDocuments() async {
+    try {
+      // Méthode alternative plus simple
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: true,
+        withData: false,
+        withReadStream: false,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          for (var file in result.files) {
+            if (file.path != null) {
+              _selectedFiles.add(File(file.path!));
+            }
+          }
+        });
+        _updateProofField();
+      }
+    } catch (e) {
+      print('Erreur file_picker: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de la sélection: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Mettre à jour le champ proof avec le nombre de fichiers
+  void _updateProofField() {
+    if (_selectedFiles.isNotEmpty) {
+      _proofController.text = '${_selectedFiles.length} document(s) sélectionné(s)';
+    } else {
+      _proofController.text = '';
+    }
+  }
+
+  // Supprimer un fichier
+  void _removeFile(int index) {
+    setState(() {
+      _selectedFiles.removeAt(index);
+    });
+    _updateProofField();
+  }
+
+  // Afficher les options de sélection
+  void _showFileSelectionOptions() {
+    _pickDocuments();
   }
 
   @override
@@ -67,7 +125,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          buildNotificationAction(context), // Remplacement par buildNotificationAction
+                          buildNotificationAction(context),
                         ],
                       ),
 
@@ -149,12 +207,98 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
                         const SizedBox(height: 20),
 
-                        // Champ Proof
+                        // Champ Proof avec bouton d'ajout
                         _buildFieldWithIcon(
                           controller: _proofController,
-                          hintText: 'Proof',
-                          icon: Icons.download,
+                          hintText: 'Ajouter des documents justificatifs',
+                          icon: Icons.attach_file,
+                          onTap: _showFileSelectionOptions,
                         ),
+
+                        const SizedBox(height: 10),
+
+                        // Affichage des fichiers sélectionnés
+                        if (_selectedFiles.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0xFF6074F9).withOpacity(0.2),
+                                width: 1,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Documents sélectionnés:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                ...List.generate(_selectedFiles.length, (index) {
+                                  final file = _selectedFiles[index];
+                                  final fileName = file.path.split('/').last;
+                                  final extension = fileName.split('.').last.toLowerCase();
+                                  
+                                  IconData fileIcon;
+                                  switch (extension) {
+                                    case 'pdf':
+                                      fileIcon = Icons.picture_as_pdf;
+                                      break;
+                                    case 'doc':
+                                    case 'docx':
+                                      fileIcon = Icons.description;
+                                      break;
+                                    case 'xlsx':
+                                    case 'xls':
+                                      fileIcon = Icons.table_chart;
+                                      break;
+                                    case 'txt':
+                                      fileIcon = Icons.text_snippet;
+                                      break;
+                                    default:
+                                      fileIcon = Icons.insert_drive_file;
+                                  }
+
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[50],
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.grey[300]!),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          fileIcon,
+                                          color: const Color(0xFF6074F9),
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            fileName,
+                                            style: const TextStyle(fontSize: 14),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                                          onPressed: () => _removeFile(index),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
 
                         const SizedBox(height: 20),
 
@@ -177,11 +321,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                           child: ElevatedButton(
                             onPressed: () async {
                               if (_formKey.currentState!.validate()) {
+                                // Créer la liste des chemins des fichiers pour la sauvegarde
+                                List<String> filePaths = _selectedFiles.map((file) => file.path).toList();
+                                
                                 final line = SpendLine(
                                   name: _lineNameController.text.trim(),
                                   description: _descriptionController.text.trim(),
                                   budget: double.tryParse(_budgetController.text) ?? 0,
-                                  proof: _proofController.text.trim(),
+                                  proof: filePaths.join(';'), // Sauvegarder les chemins séparés par ';'
                                   date: _selectedDate,
                                 );
 
@@ -194,7 +341,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                                 Navigator.pop(context);
                               }
                             },
-
                             style: ElevatedButton.styleFrom(
                               backgroundColor: themeColor,
                               foregroundColor: Colors.white,
