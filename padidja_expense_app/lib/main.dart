@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/screens/add_expense_screen.dart';
+import 'package:padidja_expense_app/screens/add_transaction_screen.dart';
 import 'package:padidja_expense_app/screens/add_users_screen.dart';
+import 'package:padidja_expense_app/screens/add_wallet_screen.dart';
 import 'package:padidja_expense_app/screens/auth_screen.dart';
 import 'package:padidja_expense_app/screens/history_screen.dart';
 import 'package:padidja_expense_app/screens/home_screen.dart';
+import 'package:padidja_expense_app/screens/home_wallet_screen.dart';
 import 'package:padidja_expense_app/screens/setting_screen.dart';
 import 'package:padidja_expense_app/screens/spend_line_screen.dart';
 import 'package:padidja_expense_app/screens/splash_screen.dart';
 import 'package:padidja_expense_app/screens/stats_screen.dart';
 import 'package:padidja_expense_app/screens/user_page_screen.dart';
+import 'package:padidja_expense_app/screens/verify_wallet_screen.dart';
 import 'services/database_service.dart';
 
 
@@ -48,6 +52,10 @@ class PadidjaApp extends StatelessWidget {
         '/userpage': (context) =>  UserListPage (),
         '/spendline': (context) =>  SpendLinePage(),
         '/settings': (context) =>  const SettingsPage(),
+        '/addwallet': (context) =>  const AddWalletScreen(),
+        '/addTransaction': (context) =>  const AddTransactionScreen(),
+        '/wallets': (context) =>  const WalletHomeScreen(),
+        '/verifyWallet': (context) =>  const WalletVerificationScreen (),
 
 
       },
