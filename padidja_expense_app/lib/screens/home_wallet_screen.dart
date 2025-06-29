@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/screens/verify_wallet_screen.dart';
-// Import du widget de notification
+import 'package:padidja_expense_app/screens/notification_screen.dart';
+import 'package:padidja_expense_app/screens/history_screen.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../models/wallet.dart';
@@ -20,7 +21,7 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
   List<Wallet> _wallets = [];
   List<Transaction> _transactions = [];
   final themeColor = const Color(0xFF6074F9);
-  bool _isLoading = false; // Indicateur de chargement
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -50,21 +51,108 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
     }
   }
 
-  // Fonction pour naviguer vers l'écran de vérification
-  void _navigateToWalletVerification() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const WalletVerificationScreen(),
-      ),
-    ).then((result) {
-      if (result == true) {
-        _loadData();
-      }
-    });
-  }
 
-  // Fonction pour supprimer un portefeuille
+// Dans WalletHomeScreen, remplacez la méthode _navigateToWalletVerification par :
+
+// Voici la version corrigée avec plus de debug pour identifier le problème
+
+Future<void> _navigateToWalletVerification() async {
+  print("🚀 Navigation vers WalletVerificationScreen");
+  
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const WalletVerificationScreen()),
+  );
+  
+  print("🔄 Retour de WalletVerificationScreen avec result: $result");
+  
+  if (result == true && mounted) {
+    print("✅ Result est true et widget est mounted");
+    
+    try {
+      // Recharger d'abord les données
+      print("📂 Rechargement des données...");
+      await _loadData();
+      
+      // Récupérer tous les portefeuilles
+      final wallets = await WalletDatabase.instance.getWallets();
+      print("💼 Portefeuilles récupérés: ${wallets.length}");
+      
+      if (wallets.isNotEmpty) {
+        final newWallet = wallets.last;
+        print("🆕 Nouveau portefeuille: ${newWallet.name} avec balance ${newWallet.balance}");
+        
+        // Vérifier si une transaction existe déjà pour ce portefeuille
+        final existingTransactions = await WalletDatabase.instance.getAllTransactions();
+        final walletCreationTx = existingTransactions.where(
+          (tx) => tx.description.contains('Ajout de portefeuille: ${newWallet.name}')
+        ).toList();
+        
+        print("🔍 Transactions existantes pour ce portefeuille: ${walletCreationTx.length}");
+        
+        if (walletCreationTx.isEmpty) {
+          // Créer la transaction d'ajout de portefeuille
+          final transaction = Transaction(
+            type: 'income',
+            amount: newWallet.balance,
+            description: 'Ajout de portefeuille: ${newWallet.name}',
+            date: DateTime.now(),
+            source: newWallet.name,
+          );
+          
+          print("💰 Création de la transaction: ${transaction.toMap()}");
+          
+          // Insérer directement dans la base sans mise à jour du solde
+          final db = await WalletDatabase.instance.database;
+          final txMap = transaction.toMap();
+          txMap['date'] = DateTime.now().toIso8601String();
+          
+          print("📝 Insertion directe dans la DB: $txMap");
+          
+          final id = await db.insert('transactions', txMap);
+          print("✅ Transaction insérée avec ID: $id");
+          
+          // Vérifier que la transaction a bien été insérée
+          final allTx = await db.query('transactions');
+          print("🔄 Toutes les transactions après insertion: $allTx");
+          
+          // Recharger les données
+          await _loadData();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Portefeuille "${newWallet.name}" ajouté avec succès !'),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          print("⚠️ Transaction déjà existante pour ce portefeuille");
+        }
+      } else {
+        print("❌ Aucun portefeuille trouvé après ajout");
+      }
+    } catch (e) {
+      print("❌ Erreur dans _navigateToWalletVerification: $e");
+      print("📊 Stack trace: ${StackTrace.current}");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'ajout: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  } else {
+    print("⚠️ Result n'est pas true ou widget n'est pas mounted - result: $result, mounted: $mounted");
+  }
+}
   Future<void> _deleteWallet(Wallet wallet) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -123,7 +211,6 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
           children: [
             Column(
               children: [
-                // En-tête avec gradient
                 Container(
                   height: 200,
                   decoration: const BoxDecoration(
@@ -145,7 +232,6 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              // Retrait de la flèche de retour, remplacé par un espace
                               const SizedBox(width: 40),
                               const Text(
                                 'Tableau de bord',
@@ -155,7 +241,6 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
                                   color: Colors.white,
                                 ),
                               ),
-                              // Ajout du widget de notification
                               buildNotificationAction(context),
                             ],
                           ),
@@ -164,7 +249,6 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
                     ),
                   ),
                 ),
-                // Contenu principal
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(20),
@@ -217,14 +301,11 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
                               onPressed: _navigateToWalletVerification,
                               icon: const Icon(Icons.add, size: 18),
                               label: const Text('Ajouter'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: themeColor,
-                              ),
+                              style: TextButton.styleFrom(foregroundColor: themeColor),
                             ),
                           ],
                         ),
                         const SizedBox(height: 10),
-                        // Affichage des portefeuilles ou message si aucun
                         if (_wallets.isEmpty)
                           Container(
                             width: double.infinity,
@@ -283,88 +364,85 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
                           )
                         else
                           ..._wallets.map((w) => Container(
-                                margin: const EdgeInsets.only(bottom: 10),
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: themeColor.withOpacity(0.2), width: 1),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.grey.withOpacity(0.08),
-                                      spreadRadius: 1,
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: themeColor.withOpacity(0.2), width: 1),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.grey.withOpacity(0.08),
+                                  spreadRadius: 1,
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
                                 ),
-                                child: Row(
-                                  children: [
-                                    // Icône du portefeuille selon le type
-                                    Container(
-                                      width: 50,
-                                      height: 50,
-                                      decoration: BoxDecoration(
-                                        color: _getWalletColor(w.name).withOpacity(0.1),
-                                        shape: BoxShape.circle,
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    color: _getWalletColor(w.name).withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    _getWalletIcon(w.name),
+                                    color: _getWalletColor(w.name),
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        w.name,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
-                                      child: Icon(
-                                        _getWalletIcon(w.name),
-                                        color: _getWalletColor(w.name),
-                                        size: 24,
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${w.balance.toStringAsFixed(2)} FCFA',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[600],
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    // Informations du portefeuille
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuButton<String>(
+                                  onSelected: (value) {
+                                    if (value == 'delete') {
+                                      _deleteWallet(w);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(
+                                      value: 'delete',
+                                      child: Row(
                                         children: [
-                                          Text(
-                                            w.name,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            '${w.balance.toStringAsFixed(2)} FCFA',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey[600],
-                                            ),
-                                          ),
+                                          Icon(Icons.delete, color: Colors.red, size: 18),
+                                          SizedBox(width: 8),
+                                          Text('Supprimer', style: TextStyle(color: Colors.red)),
                                         ],
                                       ),
                                     ),
-                                    // Menu d'actions
-                                    PopupMenuButton<String>(
-                                      onSelected: (value) {
-                                        if (value == 'delete') {
-                                          _deleteWallet(w);
-                                        }
-                                      },
-                                      itemBuilder: (context) => [
-                                        const PopupMenuItem(
-                                          value: 'delete',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.delete, color: Colors.red, size: 18),
-                                              SizedBox(width: 8),
-                                              Text('Supprimer', style: TextStyle(color: Colors.red)),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                      child: Icon(
-                                        Icons.more_vert,
-                                        color: Colors.grey[400],
-                                      ),
-                                    ),
                                   ],
+                                  child: Icon(
+                                    Icons.more_vert,
+                                    color: Colors.grey[400],
+                                  ),
                                 ),
-                              )),
+                              ],
+                            ),
+                          )),
                         const SizedBox(height: 20),
                         const Text(
                           'Dernières transactions',
@@ -400,49 +478,48 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
                           )
                         else
                           ..._transactions.map((t) => Container(
-                                margin: const EdgeInsets.only(bottom: 10),
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: themeColor.withOpacity(0.2), width: 1),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.grey.withOpacity(0.08),
-                                      spreadRadius: 1,
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: themeColor.withOpacity(0.2), width: 1),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.grey.withOpacity(0.08),
+                                  spreadRadius: 1,
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
                                 ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '${t.type.toUpperCase()}',
-                                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                        ),
-                                        Text(
-                                          '${t.source} • ${t.description}',
-                                          style: const TextStyle(fontSize: 14, color: Colors.grey),
-                                        ),
-                                      ],
+                                    Text(
+                                      '${t.type.toUpperCase()}',
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                     ),
                                     Text(
-                                      '${t.date.day}/${t.date.month}/${t.date.year}',
-                                      style: const TextStyle(fontSize: 14),
+                                      '${t.source} • ${t.description}',
+                                      style: const TextStyle(fontSize: 14, color: Colors.grey),
                                     ),
                                   ],
                                 ),
-                              )),
+                                Text(
+                                  '${t.date.day}/${t.date.month}/${t.date.year}',
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ],
+                            ),
+                          )),
                       ],
                     ),
                   ),
                 ),
-                // Boutons flottants
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Row(
@@ -469,7 +546,6 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
                 ),
               ],
             ),
-            // Overlay de chargement
             if (_isLoading)
               Container(
                 color: Colors.black.withOpacity(0.5),
@@ -483,7 +559,6 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
     );
   }
 
-  // Fonction pour obtenir l'icône selon le type de portefeuille
   IconData _getWalletIcon(String walletName) {
     switch (walletName.toLowerCase()) {
       case 'orange money':
@@ -499,7 +574,6 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
     }
   }
 
-  // Fonction pour obtenir la couleur selon le type de portefeuille
   Color _getWalletColor(String walletName) {
     switch (walletName.toLowerCase()) {
       case 'orange money':
