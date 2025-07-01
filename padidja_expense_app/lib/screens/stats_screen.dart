@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../widgets/main_drawer_wrapper.dart';
-
+import '../services/wallet_database.dart';
+import '../models/transaction.dart' as trans;
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -13,10 +14,260 @@ class StatsScreen extends StatefulWidget {
 
 class _StatsScreenState extends State<StatsScreen> {
   bool isBarChart = true; // true pour barres, false pour camembert
+  String selectedPeriod = 'Weekly'; // Par défaut : hebdomadaire
+  int selectedMonth = DateTime.now().month; // Mois actuel
+  int selectedYear = DateTime.now().year; // Année actuelle
+  int selectedWeekOffset = 0; // Décalage par rapport à la semaine actuelle (0 = cette semaine, -1 = semaine précédente, etc.)
+  int selectedWeek = 1; // Semaine sélectionnée pour Monthly
+  List<trans.Transaction> transactions = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTransactions();
+  }
+
+  Future<void> _loadTransactions() async {
+    try {
+      final tx = await WalletDatabase.instance.getLatestTransactions(1000);
+      setState(() {
+        transactions = tx;
+        isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        isLoading = false;
+      });
+      // Gérer l'erreur si nécessaire
+    }
+  }
+
+  // Filtrer les transactions selon la période sélectionnée
+  List<trans.Transaction> _getFilteredTransactions() {
+    switch (selectedPeriod) {
+      case 'Daily':
+        final now = DateTime.now();
+        return transactions.where((tx) =>
+            tx.date.year == now.year &&
+            tx.date.month == now.month &&
+            tx.date.day == now.day).toList();
+      case 'Weekly':
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final weekStart = today.subtract(Duration(days: today.weekday - 1 + (7 * selectedWeekOffset)));
+        final weekEnd = weekStart.add(const Duration(days: 6));
+        return transactions.where((tx) =>
+            tx.date.isAfter(weekStart.subtract(const Duration(days: 1))) &&
+            tx.date.isBefore(weekEnd.add(const Duration(days: 1)))).toList();
+      case 'Monthly':
+        final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
+        final startDay = (selectedWeek - 1) * 7 + 1;
+        final endDay = startDay + 6 > daysInMonth ? daysInMonth : startDay + 6;
+        return transactions.where((tx) =>
+            tx.date.year == selectedYear &&
+            tx.date.month == selectedMonth &&
+            tx.date.day >= startDay &&
+            tx.date.day <= endDay).toList();
+      case 'Yearly':
+        return transactions.where((tx) => tx.date.year == selectedYear).toList();
+      default:
+        return [];
+    }
+  }
+
+  // Calculer les totaux par période (optimisé)
+  Map<String, double> _calculateTotals() {
+    final filteredTx = _getFilteredTransactions();
+    final Map<String, double> totals = {'budget': 0.0, 'cost': 0.0};
+
+    for (var tx in filteredTx) {
+      if (tx.type == 'income') {
+        totals['budget'] = totals['budget']! + tx.amount;
+      } else if (tx.type == 'outcome') {
+        totals['cost'] = totals['cost']! + tx.amount;
+      }
+    }
+
+    totals['save'] = totals['budget']! - totals['cost']!;
+    return totals;
+  }
+
+  // Générer les données pour le graphique en barres (corrigé)
+  List<BarChartGroupData> _buildBarChartData() {
+    final labels = _getPeriodLabels();
+    final List<BarChartGroupData> barGroups = [];
+    final filteredTx = _getFilteredTransactions();
+
+    for (int i = 0; i < labels.length; i++) {
+      double budget = 0.0;
+      double cost = 0.0;
+      
+      for (var tx in filteredTx) {
+        final txDate = tx.date;
+        bool include = false;
+        
+        switch (selectedPeriod) {
+          case 'Daily':
+            include = txDate.hour == i;
+            break;
+          case 'Weekly':
+            // Ordre naturel : Lundi (1), Mardi (2), ..., Dimanche (7)
+            include = txDate.weekday == (i + 1);
+            break;
+          case 'Monthly':
+            include = txDate.day == (i + 1) + ((selectedWeek - 1) * 7);
+            break;
+          case 'Yearly':
+            include = txDate.month == i + 1;
+            break;
+        }
+        
+        if (include) {
+          if (tx.type == 'income') budget += tx.amount;
+          if (tx.type == 'outcome') cost += tx.amount;
+        }
+      }
+      
+      barGroups.add(BarChartGroupData(
+        x: i,
+        barRods: [
+          BarChartRodData(
+            toY: budget, 
+            color: Colors.blue, 
+            width: _getBarWidth(),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          BarChartRodData(
+            toY: cost, 
+            color: Colors.blue.shade200, 
+            width: _getBarWidth(),
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ],
+      ));
+    }
+
+    return barGroups;
+  }
+
+  // Largeur des barres dynamique selon la période
+  double _getBarWidth() {
+    switch (selectedPeriod) {
+      case 'Daily':
+        return 15;
+      case 'Weekly':
+        return 25;
+      case 'Monthly':
+        return 12;
+      case 'Yearly':
+        return 20;
+      default:
+        return 20;
+    }
+  }
+
+  // Générer les étiquettes pour les axes (amélioré)
+  List<String> _getPeriodLabels() {
+    switch (selectedPeriod) {
+      case 'Daily':
+        return List.generate(24, (i) => '${i}h'); // 0h à 23h
+      case 'Weekly':
+        return ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']; // Ordre naturel
+      case 'Monthly':
+        final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
+        final startDay = (selectedWeek - 1) * 7 + 1;
+        final endDay = startDay + 6 > daysInMonth ? daysInMonth : startDay + 6;
+        return List.generate(endDay - startDay + 1, (i) => '${startDay + i}');
+      case 'Yearly':
+        return [
+          'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 
+          'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'
+        ];
+      default:
+        return [];
+    }
+  }
+
+  // Générer les données pour le graphique en camembert (amélioré)
+  List<PieChartSectionData> _buildPieChartData() {
+    final totals = _calculateTotals();
+    final totalAmount = totals['budget']! + totals['cost']!;
+    
+    if (totalAmount == 0) {
+      return [
+        PieChartSectionData(
+          color: Colors.grey.shade300,
+          value: 1,
+          title: 'Aucune donnée',
+          radius: 80,
+          titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+      ];
+    }
+
+    List<PieChartSectionData> sections = [];
+    
+    if (totals['budget']! > 0) {
+      sections.add(PieChartSectionData(
+        color: Colors.blue,
+        value: totals['budget'],
+        title: 'Budget\n\$${totals['budget']!.toStringAsFixed(2)}',
+        radius: 80,
+        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+      ));
+    }
+    
+    if (totals['cost']! > 0) {
+      sections.add(PieChartSectionData(
+        color: Colors.blue.shade200,
+        value: totals['cost'],
+        title: 'Coût\n\$${totals['cost']!.toStringAsFixed(2)}',
+        radius: 80,
+        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
+      ));
+    }
+    
+    if (totals['save']! > 0) {
+      sections.add(PieChartSectionData(
+        color: Colors.green,
+        value: totals['save'],
+        title: 'Économie\n\$${totals['save']!.toStringAsFixed(2)}',
+        radius: 80,
+        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+      ));
+    }
+
+    return sections;
+  }
+
+  // Calculer la valeur maximale pour l'axe Y du graphique en barres
+  double _getMaxYValue() {
+    final totals = _calculateTotals();
+    final maxValue = [totals['budget']!, totals['cost']!].reduce((a, b) => a > b ? a : b);
+    return maxValue > 0 ? maxValue * 1.2 : 100;
+  }
+
+  // Naviguer entre les semaines pour Weekly et Monthly
+  void _changeWeek(int delta) {
+    setState(() {
+      if (selectedPeriod == 'Weekly') {
+        selectedWeekOffset += delta;
+      } else if (selectedPeriod == 'Monthly') {
+        final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
+        final maxWeeks = (daysInMonth / 7).ceil();
+        selectedWeek = (selectedWeek + delta).clamp(1, maxWeeks);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final primaryColor = const Color(0xFF6074F9);
+    final totals = _calculateTotals();
+    final screenHeight = MediaQuery.of(context).size.height;
+    final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
+    final maxWeeks = (daysInMonth / 7).ceil();
 
     return MainDrawerWrapper(
       child: Scaffold(
@@ -31,128 +282,253 @@ class _StatsScreenState extends State<StatsScreen> {
                     color: Color(0xFF6074F9),
                     borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Le bouton menu est maintenant géré par MainDrawerWrapper
-                        const SizedBox(width: 48), // Espace pour le bouton menu du wrapper
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                Icons.bar_chart,
-                                color: isBarChart ? Colors.white : Colors.white60,
-                                size: 24,
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const SizedBox(width: 48), // Espace pour le bouton menu
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  Icons.bar_chart,
+                                  color: isBarChart ? Colors.white : Colors.white60,
+                                  size: 24,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    isBarChart = true;
+                                  });
+                                },
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  isBarChart = true;
-                                });
-                              },
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                Icons.pie_chart,
-                                color: !isBarChart ? Colors.white : Colors.white60,
-                                size: 20,
+                              IconButton(
+                                icon: Icon(
+                                  Icons.pie_chart,
+                                  color: !isBarChart ? Colors.white : Colors.white60,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    isBarChart = false;
+                                  });
+                                },
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  isBarChart = false;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                        buildNotificationAction(context), // Remplacement par buildNotificationAction
-                      ],
+                            ],
+                          ),
+                          buildNotificationAction(context),
+                        ],
+                      ),
                     ),
                   ),
                 ),
                 Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Budget",
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 10),
-                        const Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text("Daily", style: TextStyle(color: Colors.grey)),
-                            Text("Weekly", style: TextStyle(color: Colors.grey)),
-                            Text("Monthly", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-                            Text("Yearly", style: TextStyle(color: Colors.grey)),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          height: 200,
-                          child: isBarChart ? _buildBarChart() : _buildPieChart(),
-                        ),
-                        if (isBarChart) ...[
-                          const SizedBox(height: 10),
-                          Row(
+                  child: isLoading 
+                    ? const Center(child: CircularProgressIndicator())
+                    : transactions.isEmpty
+                      ? const Center(
+                          child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.circle, color: Colors.blue, size: 12),
-                              const SizedBox(width: 5),
-                              const Text("Budget"),
-                              const SizedBox(width: 10),
-                              Icon(Icons.circle, color: Colors.blue.shade200, size: 12),
-                              const SizedBox(width: 5),
-                              const Text("Cost"),
+                              Icon(Icons.analytics_outlined, size: 80, color: Colors.grey),
+                              SizedBox(height: 16),
+                              Text(
+                                'Aucune donnée disponible',
+                                style: TextStyle(fontSize: 18, color: Colors.grey),
+                              ),
                             ],
                           ),
-                        ],
-                        const SizedBox(height: 20),
-                        Container(
+                        )
+                      : SingleChildScrollView(
                           padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: primaryColor,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                "February",
-                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                                "Budget",
+                                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                               ),
-                              const SizedBox(height: 10),
-                              _detailItem("Budget", "\$3,850"),
-                              _detailItem("Cost", "\$1,235"),
-                              _detailItem("Save", "\$2,615"),
+                              const SizedBox(height: 16),
+                              
+                              // Sélecteur de période
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  _buildPeriodButton('Daily', 'Jour'),
+                                  _buildPeriodButton('Weekly', 'Semaine'),
+                                  _buildPeriodButton('Monthly', 'Mois'),
+                                  _buildPeriodButton('Yearly', 'Année'),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              
+                              // Sélecteurs de date
+                              Row(
+                                children: [
+                                  if (selectedPeriod == 'Monthly' || selectedPeriod == 'Yearly')
+                                    Expanded(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: Colors.grey.shade300),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: DropdownButtonHideUnderline(
+                                          child: DropdownButton<int>(
+                                            value: selectedPeriod == 'Monthly' ? selectedMonth : selectedYear,
+                                            isExpanded: true,
+                                            items: selectedPeriod == 'Monthly'
+                                              ? List.generate(12, (i) => DropdownMenuItem(
+                                                  value: i + 1,
+                                                  child: Text('${_getMonthName(i + 1)} $selectedYear'),
+                                                ))
+                                              : List.generate(5, (i) => DropdownMenuItem(
+                                                  value: DateTime.now().year - 2 + i,
+                                                  child: Text('${DateTime.now().year - 2 + i}'),
+                                                )),
+                                            onChanged: (value) {
+                                              setState(() {
+                                                if (selectedPeriod == 'Monthly') {
+                                                  selectedMonth = value!;
+                                                  selectedWeek = 1; // Réinitialiser la semaine
+                                                } else {
+                                                  selectedYear = value!;
+                                                  selectedWeekOffset = 0; // Réinitialiser pour Yearly
+                                                }
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  if (selectedPeriod == 'Weekly' || selectedPeriod == 'Monthly')
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.arrow_back_ios, size: 16),
+                                          onPressed: () => _changeWeek(-1),
+                                          color: primaryColor,
+                                        ),
+                                        Text(
+                                          selectedPeriod == 'Weekly'
+                                            ? 'Semaine ${selectedWeekOffset == 0 ? 'actuelle' : selectedWeekOffset > 0 ? 'future +$selectedWeekOffset' : 'passée ${selectedWeekOffset.abs()}'}'
+                                            : 'Semaine $selectedWeek / $maxWeeks',
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                                          onPressed: () => _changeWeek(1),
+                                          color: primaryColor,
+                                        ),
+                                      ],
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              
+                              // Graphique
+                              Container(
+                                height: screenHeight * 0.3,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.all(16),
+                                child: isBarChart
+                                    ? _buildBarChart()
+                                    : _buildPieChart(),
+                              ),
+                              
+                              // Légende pour le graphique en barres
+                              if (isBarChart) ...[
+                                const SizedBox(height: 16),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    _buildLegendItem(Colors.blue, "Budget"),
+                                    const SizedBox(width: 20),
+                                    _buildLegendItem(Colors.blue.shade200, "Coût"),
+                                  ],
+                                ),
+                              ],
+                              
+                              const SizedBox(height: 24),
+                              
+                              // Carte de résumé
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: primaryColor,
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: primaryColor.withValues(alpha: 0.3),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 5),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _getPeriodTitle(),
+                                      style: const TextStyle(
+                                        fontSize: 20, 
+                                        fontWeight: FontWeight.bold, 
+                                        color: Colors.white
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    _detailItem("Budget", "\$${totals['budget']!.toStringAsFixed(2)}", Icons.trending_up),
+                                    _detailItem("Coût", "\$${totals['cost']!.toStringAsFixed(2)}", Icons.trending_down),
+                                    const Divider(color: Colors.white54, height: 20),
+                                    _detailItem("Économie", "\$${totals['save']!.toStringAsFixed(2)}", Icons.savings, isTotal: true),
+                                  ],
+                                ),
+                              ),
+                              
+                              const SizedBox(height: 20),
+                              
+                              // Objectif mensuel
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: totals['save']! > 0 ? Colors.green.shade100 : Colors.orange.shade100,
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      totals['save']! > 0 ? Icons.check_circle : Icons.info,
+                                      color: totals['save']! > 0 ? Colors.green : Colors.orange,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            "Objectif mensuel",
+                                            style: TextStyle(fontWeight: FontWeight.bold),
+                                          ),
+                                          Text(
+                                            totals['save']! > 0 
+                                              ? "Objectif atteint avec succès !" 
+                                              : "Continuez vos efforts !",
+                                            style: TextStyle(
+                                              color: totals['save']! > 0 ? Colors.green.shade700 : Colors.orange.shade700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        Container(
-                          padding: const EdgeInsets.all(15),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade100,
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text("Monthly Goal"),
-                              SizedBox(width: 10),
-                              Text("Achieved Successfully", style: TextStyle(fontWeight: FontWeight.bold)),
-                              SizedBox(width: 10),
-                              Icon(Icons.circle, color: Colors.grey, size: 12),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -162,23 +538,95 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  Widget _buildPeriodButton(String period, String label) {
+    final isSelected = selectedPeriod == period;
+    return GestureDetector(
+      onTap: () => setState(() => selectedPeriod = period),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF6074F9) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 12)),
+      ],
+    );
+  }
+
+  String _getPeriodTitle() {
+    final now = DateTime.now();
+    final weekStart = now.subtract(Duration(days: now.weekday - 1 + (7 * selectedWeekOffset)));
+    switch (selectedPeriod) {
+      case 'Daily':
+        return 'Aujourd\'hui';
+      case 'Weekly':
+        return 'Semaine du ${weekStart.day}/${weekStart.month}/${weekStart.year}';
+      case 'Monthly':
+        return 'Semaine $selectedWeek - ${_getMonthName(selectedMonth)}';
+      case 'Yearly':
+        return 'Année $selectedYear';
+      default:
+        return selectedPeriod;
+    }
+  }
+
   Widget _buildBarChart() {
     return BarChart(
       BarChartData(
         alignment: BarChartAlignment.spaceAround,
-        maxY: 4000,
-        barTouchData: const BarTouchData(enabled: false),
+        maxY: _getMaxYValue(),
+        barTouchData: BarTouchData(
+          enabled: true,
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (group) => Colors.black87,
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              final label = rodIndex == 0 ? 'Budget' : 'Coût';
+              return BarTooltipItem(
+                '$label\n\${rod.toY.toStringAsFixed(2)}',
+                const TextStyle(color: Colors.white),
+              );
+            },
+          ),
+        ),
         titlesData: FlTitlesData(
           show: true,
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              reservedSize: 30,
               getTitlesWidget: (double value, TitleMeta meta) {
-                const labels = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb'];
+                final labels = _getPeriodLabels();
                 if (value.toInt() >= 0 && value.toInt() < labels.length) {
-                  return Text(
-                    labels[value.toInt()], 
-                    style: const TextStyle(color: Colors.grey)
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      labels[value.toInt()],
+                      style: const TextStyle(color: Colors.grey, fontSize: 10),
+                    ),
                   );
                 }
                 return const SizedBox.shrink();
@@ -191,50 +639,7 @@ class _StatsScreenState extends State<StatsScreen> {
         ),
         borderData: FlBorderData(show: false),
         gridData: const FlGridData(show: false),
-        barGroups: [
-          BarChartGroupData(
-            x: 0,
-            barRods: [
-              BarChartRodData(toY: 1000, color: Colors.blue.shade200, width: 20),
-              BarChartRodData(toY: 1500, color: Colors.blue, width: 20),
-            ],
-          ),
-          BarChartGroupData(
-            x: 1,
-            barRods: [
-              BarChartRodData(toY: 1200, color: Colors.blue.shade200, width: 20),
-              BarChartRodData(toY: 1800, color: Colors.blue, width: 20),
-            ],
-          ),
-          BarChartGroupData(
-            x: 2,
-            barRods: [
-              BarChartRodData(toY: 800, color: Colors.blue.shade200, width: 20),
-              BarChartRodData(toY: 2000, color: Colors.blue, width: 20),
-            ],
-          ),
-          BarChartGroupData(
-            x: 3,
-            barRods: [
-              BarChartRodData(toY: 900, color: Colors.blue.shade200, width: 20),
-              BarChartRodData(toY: 2200, color: Colors.blue, width: 20),
-            ],
-          ),
-          BarChartGroupData(
-            x: 4,
-            barRods: [
-              BarChartRodData(toY: 1100, color: Colors.blue.shade200, width: 20),
-              BarChartRodData(toY: 2500, color: Colors.blue, width: 20),
-            ],
-          ),
-          BarChartGroupData(
-            x: 5,
-            barRods: [
-              BarChartRodData(toY: 1235, color: Colors.blue.shade200, width: 20),
-              BarChartRodData(toY: 3850, color: Colors.blue, width: 20),
-            ],
-          ),
-        ],
+        barGroups: _buildBarChartData(),
       ),
     );
   }
@@ -242,58 +647,53 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget _buildPieChart() {
     return PieChart(
       PieChartData(
-        sections: [
-          PieChartSectionData(
-            color: Colors.blue,
-            value: 3850,
-            title: 'Budget\n\$3,850',
-            radius: 80,
-            titleStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          PieChartSectionData(
-            color: Colors.blue.shade200,
-            value: 1235,
-            title: 'Cost\n\$1,235',
-            radius: 80,
-            titleStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
-            ),
-          ),
-          PieChartSectionData(
-            color: Colors.green,
-            value: 2615,
-            title: 'Save\n\$2,615',
-            radius: 80,
-            titleStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-        ],
+        sections: _buildPieChartData(),
         sectionsSpace: 2,
-        centerSpaceRadius: 40,
+        centerSpaceRadius: 50,
         startDegreeOffset: -90,
+        pieTouchData: PieTouchData(
+          touchCallback: (FlTouchEvent event, pieTouchResponse) {
+            // Optionnel : ajouter des interactions
+          },
+        ),
       ),
     );
   }
 
-  Widget _detailItem(String label, String value) {
+  Widget _detailItem(String label, String value, IconData icon, {bool isTotal = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white)),
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          Icon(icon, color: Colors.white70, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label, 
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          Text(
+            value, 
+            style: TextStyle(
+              color: Colors.white, 
+              fontWeight: FontWeight.bold,
+              fontSize: isTotal ? 16 : 14,
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  String _getMonthName(int month) {
+    const months = [
+      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Aoû', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+    ];
+    return months[month - 1];
   }
 }

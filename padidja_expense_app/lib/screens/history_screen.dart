@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
+import 'package:intl/intl.dart'; // Ajoutez cette dépendance dans pubspec.yaml
 import '../widgets/main_drawer_wrapper.dart';
 import '../services/wallet_database.dart';
 import '../models/transaction.dart' as trans;
@@ -20,6 +21,45 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void initState() {
     super.initState();
     _loadTransactions();
+  }
+
+  // Méthode pour formater la date
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    if (difference.inDays == 0) {
+      return "Aujourd'hui à ${DateFormat('HH:mm').format(date)}";
+    } else if (difference.inDays == 1) {
+      return "Hier à ${DateFormat('HH:mm').format(date)}";
+    } else if (difference.inDays < 7) {
+      return "${difference.inDays} jours";
+    } else {
+      return DateFormat('dd/MM/yyyy').format(date);
+    }
+  }
+
+  // Méthode pour obtenir la date relative
+  String _getRelativeDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    if (difference.inDays == 0) {
+      return "Aujourd'hui";
+    } else if (difference.inDays == 1) {
+      return "Hier";
+    } else if (difference.inDays < 7) {
+      return "Il y a ${difference.inDays} jours";
+    } else if (difference.inDays < 30) {
+      final weeks = (difference.inDays / 7).floor();
+      return weeks == 1 ? "Il y a 1 semaine" : "Il y a $weeks semaines";
+    } else if (difference.inDays < 365) {
+      final months = (difference.inDays / 30).floor();
+      return months == 1 ? "Il y a 1 mois" : "Il y a $months mois";
+    } else {
+      final years = (difference.inDays / 365).floor();
+      return years == 1 ? "Il y a 1 an" : "Il y a $years ans";
+    }
   }
 
   // Méthode pour charger les transactions
@@ -143,36 +183,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Bouton de retour et titre
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.of(context).pop(),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: themeColor, width: 2),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Icon(
-                                Icons.arrow_back,
-                                color: themeColor,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Text(
-                          'Toutes les transactions (${_filteredTransactions.length})',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ],
+                    // Titre sans flèche de retour
+                    Text(
+                      'Toutes les transactions (${_filteredTransactions.length})',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     // Bouton de rafraîchissement
@@ -233,6 +251,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     itemBuilder: (context, index) {
                                       final tx = _filteredTransactions[index];
                                       final isIncome = tx.type == 'income';
+                                      final isDeletion = tx.type == 'deletion';
                                       
                                       return Padding(
                                         padding: const EdgeInsets.only(bottom: 12.0),
@@ -260,16 +279,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                               Container(
                                                 padding: const EdgeInsets.all(12),
                                                 decoration: BoxDecoration(
-                                                  color: isIncome 
-                                                      ? Colors.green.withOpacity(0.1)
-                                                      : Colors.red.withOpacity(0.1),
+                                                  color: isDeletion
+                                                      ? Colors.grey.withOpacity(0.1)
+                                                      : isIncome
+                                                          ? Colors.green.withOpacity(0.1)
+                                                          : Colors.red.withOpacity(0.1),
                                                   borderRadius: BorderRadius.circular(12),
                                                 ),
                                                 child: Icon(
-                                                  isIncome 
-                                                      ? Icons.arrow_downward
-                                                      : Icons.arrow_upward,
-                                                  color: isIncome ? Colors.green : Colors.red,
+                                                  isDeletion
+                                                      ? Icons.delete
+                                                      : isIncome
+                                                          ? Icons.arrow_downward
+                                                          : Icons.arrow_upward,
+                                                  color: isDeletion
+                                                      ? Colors.grey
+                                                      : isIncome
+                                                          ? Colors.green
+                                                          : Colors.red,
                                                   size: 24,
                                                 ),
                                               ),
@@ -306,13 +333,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                           ),
                                                         ),
                                                         Text(
-                                                          '${tx.date.day}/${tx.date.month}/${tx.date.year}',
+                                                          _getRelativeDate(tx.date),
                                                           style: TextStyle(
                                                             fontSize: 14,
                                                             color: Colors.grey[600],
                                                           ),
                                                         ),
                                                       ],
+                                                    ),
+                                                    // Date complète en petit
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      _formatDate(tx.date),
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey[500],
+                                                      ),
                                                     ),
                                                   ],
                                                 ),
@@ -322,11 +358,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                 crossAxisAlignment: CrossAxisAlignment.end,
                                                 children: [
                                                   Text(
-                                                    '${isIncome ? '+' : '-'}${tx.amount.abs().toStringAsFixed(0)}',
+                                                    isDeletion ? 'N/A' : '${isIncome ? '+' : '-'}${tx.amount.abs().toStringAsFixed(0)}',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       fontWeight: FontWeight.bold,
-                                                      color: isIncome ? Colors.green : Colors.red,
+                                                      color: isDeletion
+                                                          ? Colors.grey
+                                                          : isIncome
+                                                              ? Colors.green
+                                                              : Colors.red,
                                                     ),
                                                   ),
                                                   const Text(
