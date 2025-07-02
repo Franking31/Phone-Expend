@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
-import 'package:intl/intl.dart'; // Ajoutez cette dépendance dans pubspec.yaml
+import 'package:intl/intl.dart'; // Déjà inclus
 import '../widgets/main_drawer_wrapper.dart';
 import '../services/wallet_database.dart';
 import '../models/transaction.dart' as trans;
+import '../services/spend_line_database.dart'; // Ajouté
+import '../models/spend_line.dart'; // Ajouté
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -62,21 +64,41 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  // Méthode pour charger les transactions
+  // Méthode pour charger les transactions et les dépenses
   Future<void> _loadTransactions() async {
     setState(() => _isLoading = true);
     try {
-      // Déboguer la base de données
+      // Déboguer la base de données Wallet
       await WalletDatabase.instance.debugDatabase();
       
-      // Récupérer toutes les transactions
-      final transactions = await WalletDatabase.instance.getAllTransactions();
-      print("Transactions chargées dans HistoryScreen : ${transactions.length}");
+      // Récupérer toutes les transactions de WalletDatabase
+      final walletTransactions = await WalletDatabase.instance.getAllTransactions();
+      print("Transactions chargées depuis WalletDatabase : ${walletTransactions.length}");
+      
+      // Récupérer toutes les lignes de dépense de SpendLineDatabase
+      final spendLines = await SpendLineDatabase.instance.getAll();
+      print("Dépenses chargées depuis SpendLineDatabase : ${spendLines.length}");
+      
+      // Convertir les SpendLine en Transaction avec type 'expense'
+      final expenseTransactions = spendLines.map((spendLine) {
+        return trans.Transaction(
+          id: spendLine.id ?? 0, // Utiliser l'ID de SpendLine si disponible
+          type: 'expense', // Type spécifique pour les dépenses
+          source: spendLine.name, // Utiliser le nom comme source
+          amount: spendLine.budget, // Montant de la dépense
+          description: spendLine.description, // Description de la dépense
+          date: spendLine.date, // Date de la dépense
+        );
+      }).toList();
+
+      // Fusionner les transactions de Wallet et les dépenses
+      final allTransactions = [...walletTransactions, ...expenseTransactions];
       
       setState(() {
-        _allTransactions = transactions;
+        _allTransactions = allTransactions;
         _isLoading = false;
       });
+      print("Transactions totales après fusion : ${_allTransactions.length}");
     } catch (e) {
       print("Erreur lors du chargement des transactions : $e");
       setState(() => _isLoading = false);
@@ -252,6 +274,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       final tx = _filteredTransactions[index];
                                       final isIncome = tx.type == 'income';
                                       final isDeletion = tx.type == 'deletion';
+                                      final isExpense = tx.type == 'expense'; // Nouveau type
                                       
                                       return Padding(
                                         padding: const EdgeInsets.only(bottom: 12.0),
@@ -283,7 +306,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                       ? Colors.grey.withOpacity(0.1)
                                                       : isIncome
                                                           ? Colors.green.withOpacity(0.1)
-                                                          : Colors.red.withOpacity(0.1),
+                                                          : isExpense
+                                                              ? Colors.red.withOpacity(0.1)
+                                                              : Colors.grey.withOpacity(0.1), // Par défaut
                                                   borderRadius: BorderRadius.circular(12),
                                                 ),
                                                 child: Icon(
@@ -291,12 +316,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                       ? Icons.delete
                                                       : isIncome
                                                           ? Icons.arrow_downward
-                                                          : Icons.arrow_upward,
+                                                          : isExpense
+                                                              ? Icons.arrow_upward // Icône pour dépense
+                                                              : Icons.receipt, // Icône par défaut
                                                   color: isDeletion
                                                       ? Colors.grey
                                                       : isIncome
                                                           ? Colors.green
-                                                          : Colors.red,
+                                                          : isExpense
+                                                              ? Colors.red
+                                                              : Colors.grey,
                                                   size: 24,
                                                 ),
                                               ),
@@ -366,7 +395,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                           ? Colors.grey
                                                           : isIncome
                                                               ? Colors.green
-                                                              : Colors.red,
+                                                              : isExpense
+                                                                  ? Colors.red // Couleur rouge pour les dépenses
+                                                                  : Colors.black,
                                                     ),
                                                   ),
                                                   const Text(

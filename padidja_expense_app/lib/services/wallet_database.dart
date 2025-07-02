@@ -318,7 +318,7 @@ class WalletDatabase {
     final transactionSource = wallet.name;
     final transactionDescription = 'Ajout de portefeuille: ${wallet.name} (ID: ${wallet.id})';
     
-    print("🚀 Création de transaction pour ${wallet.name}");
+    print("🚀 Création de transaction pour ${wallet.name} (ID: ${wallet.id})");
     
     final transaction = {
       'type': 'income',

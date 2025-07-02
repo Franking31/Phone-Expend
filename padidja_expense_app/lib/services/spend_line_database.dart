@@ -24,7 +24,7 @@ class SpendLineDatabase {
         description TEXT,
         budget REAL,
         proof TEXT,
-        date TEXT
+        date INTEGER -- Stocker comme timestamp (millisecondsSinceEpoch)
       )
     ''');
   }
@@ -32,6 +32,26 @@ class SpendLineDatabase {
   Future<void> insert(SpendLine line) async {
     final db = await instance.database;
     await db.insert('spend_lines', line.toMap());
+  }
+
+  // Méthode avec paramètre DateTime, stockage en timestamp
+  Future<void> insertSpendTransaction(String name, String description, double amount, String proof, DateTime date) async {
+    final db = await instance.database;
+    try {
+      final spendLine = SpendLine(
+        name: name,
+        description: description,
+        budget: amount,
+        proof: proof,
+        date: date, // Stocker directement DateTime (sera converti en timestamp dans toMap)
+      );
+      
+      await db.insert('spend_lines', spendLine.toMap());
+      print("✅ Transaction de dépense ajoutée avec succès pour : $name, montant : $amount à ${date.toIso8601String()}");
+    } catch (e) {
+      print("❌ Erreur lors de l'ajout de la transaction de dépense : $e");
+      rethrow;
+    }
   }
 
   Future<List<SpendLine>> getAll() async {
