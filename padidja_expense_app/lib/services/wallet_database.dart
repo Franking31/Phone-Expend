@@ -311,44 +311,34 @@ class WalletDatabase {
   
   // CORRIGÉ - Création de transaction d'ajout de portefeuille sans ID
   Future<void> createWalletAdditionTransaction(Wallet wallet) async {
-    final db = await instance.database;
+  final db = await instance.database;
+  
+  try {
+    // Utiliser le nom du portefeuille et l'ID pour une description unique
+    final transactionSource = wallet.name;
+    final transactionDescription = 'Ajout de portefeuille: ${wallet.name} (ID: ${wallet.id})';
     
-    try {
-      // Utiliser le nom du portefeuille sans l'ID
-      final transactionSource = wallet.name;
-      final transactionDescription = 'Ajout de portefeuille: ${wallet.name}';
-      
-      // Vérifier si une transaction d'ajout existe déjà pour ce portefeuille spécifique
-      final existing = await db.query(
-        'transactions',
-        where: 'description = ? AND source = ?',
-        whereArgs: [transactionDescription, transactionSource],
-      );
-      
-      if (existing.isEmpty) {
-        print("🚀 Création de transaction pour ${wallet.name} (ID: ${wallet.id})");
-        
-        final transaction = {
-          'type': 'income',
-          'source': transactionSource,
-          'amount': wallet.balance,
-          'description': transactionDescription,
-          'date': DateTime.now().toIso8601String(),
-        };
-        
-        final id = await db.insert('transactions', transaction);
-        print("✅ Transaction créée avec ID: $id pour portefeuille ${wallet.name} (ID: ${wallet.id})");
-        
-        // Vérifier l'insertion
-        final check = await db.query('transactions', where: 'id = ?', whereArgs: [id]);
-        print("🔍 Vérification transaction: $check");
-      } else {
-        print("⚠️ Transaction d'ajout déjà existante pour ${wallet.name} (ID: ${wallet.id})");
-      }
-    } catch (e) {
-      print("❌ Erreur lors de la création de transaction: $e");
-    }
+    print("🚀 Création de transaction pour ${wallet.name}");
+    
+    final transaction = {
+      'type': 'income',
+      'source': transactionSource,
+      'amount': wallet.balance,
+      'description': transactionDescription,
+      'date': DateTime.now().toIso8601String(),
+    };
+    
+    final id = await db.insert('transactions', transaction);
+    print("✅ Transaction créée avec ID: $id pour portefeuille ${wallet.name} (ID: ${wallet.id})");
+    
+    // Vérifier l'insertion
+    final check = await db.query('transactions', where: 'id = ?', whereArgs: [id]);
+    print("🔍 Vérification transaction: $check");
+  } catch (e) {
+    print("❌ Erreur lors de la création de transaction: $e");
+    rethrow; // Propager l'erreur à l'appelant
   }
+}
 
   // Nouvelle méthode pour nettoyer les doublons
   Future<void> cleanDuplicateWallets() async {

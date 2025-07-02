@@ -112,8 +112,10 @@ class _StatsScreenState extends State<StatsScreen> {
             include = txDate.hour == i;
             break;
           case 'Weekly':
-            // Ordre naturel : Lundi (1), Mardi (2), ..., Dimanche (7)
-            include = txDate.weekday == (i + 1);
+            final adjustedIndex = i < 5 ? i + 2 : i - 5; // Samedi (0), Dimanche (1), Lundi (2), ...
+            final weekStart = DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1 + (7 * selectedWeekOffset)));
+            include = txDate.weekday == (adjustedIndex + 1) && 
+                      txDate.isAfter(weekStart.subtract(const Duration(days: 1)));
             break;
           case 'Monthly':
             include = txDate.day == (i + 1) + ((selectedWeek - 1) * 7);
@@ -173,7 +175,7 @@ class _StatsScreenState extends State<StatsScreen> {
       case 'Daily':
         return List.generate(24, (i) => '${i}h'); // 0h à 23h
       case 'Weekly':
-        return ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']; // Ordre naturel
+        return ['Sam', 'Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven']; // Ordre commençant par Samedi
       case 'Monthly':
         final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
         final startDay = (selectedWeek - 1) * 7 + 1;

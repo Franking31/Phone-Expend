@@ -27,31 +27,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return transactions.where((tx) => tx.type.toLowerCase() == _selectedType.toLowerCase()).toList();
   }
 
-  // Méthode pour calculer la variation hebdomadaire (pourcentage de perte/gain)
+  // Méthode pour calculer la variation et le solde restant basé sur le total actuel
   Future<Map<String, double>> _calculateWeeklyVariation() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final lastWeekStart = today.subtract(const Duration(days: 14)); // Début de la semaine il y a 2 semaines
-    final thisWeekStart = today.subtract(const Duration(days: 7)); // Début de la semaine dernière
-
-    // Récupérer les transactions des deux dernières semaines
-    final allTransactions = await WalletDatabase.instance.getLatestTransactions(1000); // Ajuster selon vos besoins
-    final lastWeekTransactions = allTransactions.where((tx) =>
-        tx.date.isAfter(lastWeekStart.subtract(const Duration(days: 1))) &&
-        tx.date.isBefore(thisWeekStart.add(const Duration(days: 1))));
-    final thisWeekTransactions = allTransactions.where((tx) =>
-        tx.date.isAfter(thisWeekStart.subtract(const Duration(days: 1))) &&
-        tx.date.isBefore(today.add(const Duration(days: 1))));
-
-    // Calculer les totaux
-    final lastWeekTotal = lastWeekTransactions.fold<double>(0, (sum, tx) => sum + tx.amount);
-    final thisWeekTotal = thisWeekTransactions.fold<double>(0, (sum, tx) => sum + tx.amount);
-
-    if (lastWeekTotal == 0) return {'variation': 0.0, 'remaining': thisWeekTotal};
-
-    // Calculer la variation en pourcentage
-    final variation = ((thisWeekTotal - lastWeekTotal) / lastWeekTotal) * 100;
-    final remaining = lastWeekTotal - thisWeekTotal; // Solde restant par rapport à la semaine de départ
+    final currentTotal = await _getTotalBalance();
+    // Le "Solde restant" est simplement le total actuel (pas de référence historique)
+    final remaining = currentTotal;
+    // Variation par rapport à zéro (initialement)
+    final variation = currentTotal > 0 ? 100.0 : 0.0; // Simplification : 100% si positif, 0% si zéro
 
     return {'variation': variation, 'remaining': remaining};
   }
@@ -60,6 +42,18 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _selectedType = type.toLowerCase();
     });
+  }
+
+  // Méthode pour supprimer un portefeuille et rafraîchir l'état
+  Future<void> _deleteWallet(int walletId) async {
+    try {
+      await WalletDatabase.instance.deleteWallet(walletId);
+      setState(() {}); // Rafraîchir l'état pour recalculer les soldes
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erreur lors de la suppression : $e")),
+      );
+    }
   }
 
   @override
@@ -72,14 +66,15 @@ class _HomeScreenState extends State<HomeScreen> {
         body: FutureBuilder<double>(
           future: _getTotalBalance(),
           builder: (context, snapshot) {
+            if (!snapshot.hasData) return const CircularProgressIndicator();
             double total = snapshot.data ?? 0.0;
             return FutureBuilder<List<Transaction>>(
               future: _getFilteredTransactions(),
               builder: (context, txSnapshot) {
+                if (!txSnapshot.hasData) return const CircularProgressIndicator();
                 final transactions = txSnapshot.data ?? [];
                 return Column(
                   children: [
-                    // Header avec forme arrondie
                     Container(
                       padding: const EdgeInsets.fromLTRB(20, 50, 20, 40),
                       width: double.infinity,
@@ -92,7 +87,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       child: Column(
                         children: [
-                          // Bouton notification
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
@@ -100,7 +94,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                           const SizedBox(height: 30),
-
                           Column(
                             children: [
                               Text(
@@ -123,9 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ],
                           ),
-
                           const SizedBox(height: 30),
-
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -133,24 +124,20 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(width: 15),
                               _typeButton("Outcome", _selectedType == 'outcome'),
                             ],
-                          )
+                          ),
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 30),
-
-                    // Contenu déroulant
                     Expanded(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.all(20),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _savingsCard(transactions),
+                            _savingsCard(transactions, total),
                             const SizedBox(height: 15),
-                            _savingsCard(transactions),
-
+                            _savingsCard(transactions, total),
                             const Padding(
                               padding: EdgeInsets.fromLTRB(0, 30, 0, 20),
                               child: Row(
@@ -184,7 +171,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ],
                               ),
                             ),
-
                             _transactionCard(transactions),
                             const SizedBox(height: 10),
                             _transactionCard(transactions),
@@ -234,16 +220,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _savingsCard(List<Transaction> transactions) {
-    // Calculer la somme des montants pour les transactions filtrées
+  Widget _savingsCard(List<Transaction> transactions, double totalBalance) {
     final totalAmount = transactions.fold<double>(0, (sum, tx) => sum + tx.amount);
     return FutureBuilder<Map<String, double>>(
       future: _calculateWeeklyVariation(),
       builder: (context, snapshot) {
-        final variationData = snapshot.data ?? {'variation': 0.0, 'remaining': 0.0};
+        if (!snapshot.hasData) return const CircularProgressIndicator();
+        final variationData = snapshot.data!;
         final variation = variationData['variation']!;
         final remaining = variationData['remaining']!;
-        final isGain = variation >= 0;
+        final isGain = remaining >= 0;
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 0),
@@ -282,7 +268,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         const Text("Deposit", style: TextStyle(color: Colors.grey, fontSize: 14)),
                         const SizedBox(height: 5),
-                        Text("\$${totalAmount.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text("\$${totalBalance.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       ],
                     ),
                     Column(
@@ -319,7 +305,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _transactionCard(List<Transaction> transactions) {
-    // Prendre la première transaction disponible (ou une par défaut si aucune)
     final transaction = transactions.isNotEmpty ? transactions.first : null;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 0),
