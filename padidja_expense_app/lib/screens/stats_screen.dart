@@ -13,12 +13,12 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
-  bool isBarChart = true; // true pour barres, false pour camembert
-  String selectedPeriod = 'Weekly'; // Par défaut : hebdomadaire
-  int selectedMonth = DateTime.now().month; // Mois actuel
-  int selectedYear = DateTime.now().year; // Année actuelle
-  int selectedWeekOffset = 0; // Décalage par rapport à la semaine actuelle (0 = cette semaine, -1 = semaine précédente, etc.)
-  int selectedWeek = 1; // Semaine sélectionnée pour Monthly
+  bool isBarChart = true;
+  String selectedPeriod = 'Weekly';
+  int selectedMonth = DateTime.now().month;
+  int selectedYear = DateTime.now().year;
+  int selectedWeekOffset = 0;
+  int selectedWeek = 1;
   List<trans.Transaction> transactions = [];
   bool isLoading = true;
 
@@ -39,11 +39,9 @@ class _StatsScreenState extends State<StatsScreen> {
       setState(() {
         isLoading = false;
       });
-      // Gérer l'erreur si nécessaire
     }
   }
 
-  // Filtrer les transactions selon la période sélectionnée
   List<trans.Transaction> _getFilteredTransactions() {
     switch (selectedPeriod) {
       case 'Daily':
@@ -76,7 +74,6 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
-  // Calculer les totaux par période (optimisé)
   Map<String, double> _calculateTotals() {
     final filteredTx = _getFilteredTransactions();
     final Map<String, double> totals = {'budget': 0.0, 'cost': 0.0};
@@ -93,7 +90,6 @@ class _StatsScreenState extends State<StatsScreen> {
     return totals;
   }
 
-  // Générer les données pour le graphique en barres (corrigé)
   List<BarChartGroupData> _buildBarChartData() {
     final labels = _getPeriodLabels();
     final List<BarChartGroupData> barGroups = [];
@@ -112,10 +108,12 @@ class _StatsScreenState extends State<StatsScreen> {
             include = txDate.hour == i;
             break;
           case 'Weekly':
-            final adjustedIndex = i < 5 ? i + 2 : i - 5; // Samedi (0), Dimanche (1), Lundi (2), ...
+            // Mapper i (0 à 6) à weekday (1 à 7) : Lundi (1), ..., Dimanche (7)
+            final dayIndex = i + 1; // 1 = Lundi, 7 = Dimanche
             final weekStart = DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1 + (7 * selectedWeekOffset)));
-            include = txDate.weekday == (adjustedIndex + 1) && 
-                      txDate.isAfter(weekStart.subtract(const Duration(days: 1)));
+            include = txDate.weekday == dayIndex && 
+                      txDate.isAfter(weekStart.subtract(const Duration(days: 1))) &&
+                      txDate.isBefore(weekStart.add(const Duration(days: 7)));
             break;
           case 'Monthly':
             include = txDate.day == (i + 1) + ((selectedWeek - 1) * 7);
@@ -153,7 +151,6 @@ class _StatsScreenState extends State<StatsScreen> {
     return barGroups;
   }
 
-  // Largeur des barres dynamique selon la période
   double _getBarWidth() {
     switch (selectedPeriod) {
       case 'Daily':
@@ -169,13 +166,12 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
-  // Générer les étiquettes pour les axes (amélioré)
   List<String> _getPeriodLabels() {
     switch (selectedPeriod) {
       case 'Daily':
-        return List.generate(24, (i) => '${i}h'); // 0h à 23h
+        return List.generate(24, (i) => '${i}h');
       case 'Weekly':
-        return ['Sam', 'Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven']; // Ordre commençant par Samedi
+        return ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']; // Ordre commençant par Lundi
       case 'Monthly':
         final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
         final startDay = (selectedWeek - 1) * 7 + 1;
@@ -183,7 +179,7 @@ class _StatsScreenState extends State<StatsScreen> {
         return List.generate(endDay - startDay + 1, (i) => '${startDay + i}');
       case 'Yearly':
         return [
-          'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 
+          'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
           'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'
         ];
       default:
@@ -191,7 +187,6 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
-  // Générer les données pour le graphique en camembert (amélioré)
   List<PieChartSectionData> _buildPieChartData() {
     final totals = _calculateTotals();
     final totalAmount = totals['budget']! + totals['cost']!;
@@ -243,14 +238,12 @@ class _StatsScreenState extends State<StatsScreen> {
     return sections;
   }
 
-  // Calculer la valeur maximale pour l'axe Y du graphique en barres
   double _getMaxYValue() {
     final totals = _calculateTotals();
     final maxValue = [totals['budget']!, totals['cost']!].reduce((a, b) => a > b ? a : b);
     return maxValue > 0 ? maxValue * 1.2 : 100;
   }
 
-  // Naviguer entre les semaines pour Weekly et Monthly
   void _changeWeek(int delta) {
     setState(() {
       if (selectedPeriod == 'Weekly') {
@@ -290,7 +283,7 @@ class _StatsScreenState extends State<StatsScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const SizedBox(width: 48), // Espace pour le bouton menu
+                          const SizedBox(width: 48),
                           Row(
                             children: [
                               IconButton(
@@ -353,7 +346,6 @@ class _StatsScreenState extends State<StatsScreen> {
                               ),
                               const SizedBox(height: 16),
                               
-                              // Sélecteur de période
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
@@ -365,7 +357,6 @@ class _StatsScreenState extends State<StatsScreen> {
                               ),
                               const SizedBox(height: 16),
                               
-                              // Sélecteurs de date
                               Row(
                                 children: [
                                   if (selectedPeriod == 'Monthly' || selectedPeriod == 'Yearly')
@@ -393,10 +384,10 @@ class _StatsScreenState extends State<StatsScreen> {
                                               setState(() {
                                                 if (selectedPeriod == 'Monthly') {
                                                   selectedMonth = value!;
-                                                  selectedWeek = 1; // Réinitialiser la semaine
+                                                  selectedWeek = 1;
                                                 } else {
                                                   selectedYear = value!;
-                                                  selectedWeekOffset = 0; // Réinitialiser pour Yearly
+                                                  selectedWeekOffset = 0;
                                                 }
                                               });
                                             },
@@ -428,7 +419,6 @@ class _StatsScreenState extends State<StatsScreen> {
                               ),
                               const SizedBox(height: 20),
                               
-                              // Graphique
                               Container(
                                 height: screenHeight * 0.3,
                                 decoration: BoxDecoration(
@@ -441,7 +431,6 @@ class _StatsScreenState extends State<StatsScreen> {
                                     : _buildPieChart(),
                               ),
                               
-                              // Légende pour le graphique en barres
                               if (isBarChart) ...[
                                 const SizedBox(height: 16),
                                 Row(
@@ -456,7 +445,6 @@ class _StatsScreenState extends State<StatsScreen> {
                               
                               const SizedBox(height: 24),
                               
-                              // Carte de résumé
                               Container(
                                 padding: const EdgeInsets.all(20),
                                 decoration: BoxDecoration(
@@ -476,8 +464,8 @@ class _StatsScreenState extends State<StatsScreen> {
                                     Text(
                                       _getPeriodTitle(),
                                       style: const TextStyle(
-                                        fontSize: 20, 
-                                        fontWeight: FontWeight.bold, 
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
                                         color: Colors.white
                                       ),
                                     ),
@@ -492,7 +480,6 @@ class _StatsScreenState extends State<StatsScreen> {
                               
                               const SizedBox(height: 20),
                               
-                              // Objectif mensuel
                               Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
@@ -671,7 +658,7 @@ class _StatsScreenState extends State<StatsScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              label, 
+              label,
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
@@ -679,9 +666,9 @@ class _StatsScreenState extends State<StatsScreen> {
             ),
           ),
           Text(
-            value, 
+            value,
             style: TextStyle(
-              color: Colors.white, 
+              color: Colors.white,
               fontWeight: FontWeight.bold,
               fontSize: isTotal ? 16 : 14,
             ),
