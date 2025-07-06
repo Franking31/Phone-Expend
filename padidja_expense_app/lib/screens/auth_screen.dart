@@ -114,7 +114,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
                     if (isLogin) {
                       // Exemple temporaire (sans base de données)
-                      if (email == "admin@padidja.com" && password == "123456") {
+                      if (email == "" && password == "") {
                         Navigator.of(context).pushReplacementNamed('/home'); // ✅ navigation
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(

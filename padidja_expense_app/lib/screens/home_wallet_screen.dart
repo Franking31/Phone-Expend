@@ -9,7 +9,6 @@ import '../models/transaction.dart';
 import '../services/wallet_database.dart';
 import 'add_transaction_screen.dart';
 
-
 class WalletHomeScreen extends StatefulWidget {
   const WalletHomeScreen({super.key});
 
@@ -22,11 +21,46 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
   List<Transaction> _transactions = [];
   final themeColor = const Color(0xFF6074F9);
   bool _isLoading = false;
+  double _globalWalletLimit = 1000000.0; // Limite globale par défaut (1M FCFA)
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadGlobalWalletLimit();
+  }
+
+  Future<void> _loadGlobalWalletLimit() async {
+    try {
+      final db = await WalletDatabase.instance.database;
+      final result = await db.query('settings', where: 'key = ?', whereArgs: ['global_wallet_limit']);
+      if (result.isNotEmpty) {
+        setState(() {
+          _globalWalletLimit = double.parse(result.first['value'] as String);
+        });
+      } else {
+        await db.insert('settings', {'key': 'global_wallet_limit', 'value': _globalWalletLimit.toString()});
+      }
+    } catch (e) {
+      print('Erreur lors du chargement de la limite globale: $e');
+    }
+  }
+
+  Future<void> _saveGlobalWalletLimit(double limit) async {
+    try {
+      final db = await WalletDatabase.instance.database;
+      await db.update(
+        'settings',
+        {'value': limit.toString()},
+        where: 'key = ?',
+        whereArgs: ['global_wallet_limit'],
+      );
+      setState(() {
+        _globalWalletLimit = limit;
+      });
+    } catch (e) {
+      print('Erreur lors de la sauvegarde de la limite globale: $e');
+    }
   }
 
   Future<void> _loadData() async {
@@ -51,108 +85,158 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
     }
   }
 
-
-// Dans WalletHomeScreen, remplacez la méthode _navigateToWalletVerification par :
-
-// Voici la version corrigée avec plus de debug pour identifier le problème
-
-Future<void> _navigateToWalletVerification() async {
-  print("🚀 Navigation vers WalletVerificationScreen");
-  
-  final result = await Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => const WalletVerificationScreen()),
-  );
-  
-  print("🔄 Retour de WalletVerificationScreen avec result: $result");
-  
-  if (result == true && mounted) {
-    print("✅ Result est true et widget est mounted");
-    
-    try {
-      // Recharger d'abord les données
-      print("📂 Rechargement des données...");
-      await _loadData();
-      
-      // Récupérer tous les portefeuilles
-      final wallets = await WalletDatabase.instance.getWallets();
-      print("💼 Portefeuilles récupérés: ${wallets.length}");
-      
-      if (wallets.isNotEmpty) {
-        final newWallet = wallets.last;
-        print("🆕 Nouveau portefeuille: ${newWallet.name} avec balance ${newWallet.balance}");
-        
-        // Vérifier si une transaction existe déjà pour ce portefeuille
-        final existingTransactions = await WalletDatabase.instance.getAllTransactions();
-        final walletCreationTx = existingTransactions.where(
-          (tx) => tx.description.contains('Ajout de portefeuille: ${newWallet.name}')
-        ).toList();
-        
-        print("🔍 Transactions existantes pour ce portefeuille: ${walletCreationTx.length}");
-        
-        if (walletCreationTx.isEmpty) {
-          // Créer la transaction d'ajout de portefeuille
-          final transaction = Transaction(
-            type: 'income',
-            amount: newWallet.balance,
-            description: 'Ajout de portefeuille: ${newWallet.name}',
-            date: DateTime.now(),
-            source: newWallet.name,
-          );
-          
-          print("💰 Création de la transaction: ${transaction.toMap()}");
-          
-          // Insérer directement dans la base sans mise à jour du solde
-          final db = await WalletDatabase.instance.database;
-          final txMap = transaction.toMap();
-          txMap['date'] = DateTime.now().toIso8601String();
-          
-          print("📝 Insertion directe dans la DB: $txMap");
-          
-          final id = await db.insert('transactions', txMap);
-          print("✅ Transaction insérée avec ID: $id");
-          
-          // Vérifier que la transaction a bien été insérée
-          final allTx = await db.query('transactions');
-          print("🔄 Toutes les transactions après insertion: $allTx");
-          
-          // Recharger les données
-          await _loadData();
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Portefeuille "${newWallet.name}" ajouté avec succès !'),
-                backgroundColor: Colors.green,
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 2),
+  Future<void> _setGlobalWalletLimit() async {
+    final controller = TextEditingController(text: _globalWalletLimit.toStringAsFixed(2));
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Définir la limite globale des portefeuilles'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Cette limite empêchera l\'ajout de nouveaux portefeuilles si la somme totale dépasse cette valeur'),
+            const SizedBox(height: 15),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Limite globale (FCFA)',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.account_balance_wallet),
               ),
-            );
-          }
-        } else {
-          print("⚠️ Transaction déjà existante pour ce portefeuille");
-        }
-      } else {
-        print("❌ Aucun portefeuille trouvé après ajout");
-      }
-    } catch (e) {
-      print("❌ Erreur dans _navigateToWalletVerification: $e");
-      print("📊 Stack trace: ${StackTrace.current}");
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newLimit = double.tryParse(controller.text) ?? 0.0;
+              Navigator.pop(context, newLimit);
+            },
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result > 0) {
+      await _saveGlobalWalletLimit(result);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur lors de l\'ajout: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Limite globale mise à jour à ${result.toStringAsFixed(2)} FCFA'),
+            backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
           ),
         );
       }
     }
-  } else {
-    print("⚠️ Result n'est pas true ou widget n'est pas mounted - result: $result, mounted: $mounted");
   }
-}
+
+  Future<void> _navigateToWalletVerification() async {
+    print("🚀 Navigation vers WalletVerificationScreen");
+    
+    // Vérifier la limite globale avant de naviguer
+    final currentTotal = _wallets.fold<double>(0, (sum, w) => sum + w.balance);
+    
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WalletVerificationScreen(
+          currentTotalBalance: currentTotal,
+          globalWalletLimit: _globalWalletLimit,
+        ),
+      ),
+    );
+    
+    print("🔄 Retour de WalletVerificationScreen avec result: $result");
+    
+    if (result == true && mounted) {
+      print("✅ Result est true et widget est mounted");
+      
+      try {
+        print("📂 Rechargement des données...");
+        await _loadData();
+        
+        final wallets = await WalletDatabase.instance.getWallets();
+        print("💼 Portefeuilles récupérés: ${wallets.length}");
+        
+        if (wallets.isNotEmpty) {
+          final newWallet = wallets.last;
+          print("🆕 Nouveau portefeuille: ${newWallet.name} avec balance ${newWallet.balance}");
+          
+          final existingTransactions = await WalletDatabase.instance.getAllTransactions();
+          final walletCreationTx = existingTransactions.where(
+            (tx) => tx.description.contains('Ajout de portefeuille: ${newWallet.name}')
+          ).toList();
+          
+          print("🔍 Transactions existantes pour ce portefeuille: ${walletCreationTx.length}");
+          
+          if (walletCreationTx.isEmpty) {
+            final transaction = Transaction(
+              type: 'income',
+              amount: newWallet.balance,
+              description: 'Ajout de portefeuille: ${newWallet.name}',
+              date: DateTime.now(),
+              source: newWallet.name,
+            );
+            
+            print("💰 Création de la transaction: ${transaction.toMap()}");
+            
+            final db = await WalletDatabase.instance.database;
+            final txMap = transaction.toMap();
+            txMap['date'] = DateTime.now().toIso8601String();
+            
+            print("📝 Insertion directe dans la DB: $txMap");
+            
+            final id = await db.insert('transactions', txMap);
+            print("✅ Transaction insérée avec ID: $id");
+            
+            final allTx = await db.query('transactions');
+            print("🔄 Toutes les transactions après insertion: $allTx");
+            
+            await _loadData();
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Portefeuille "${newWallet.name}" ajouté avec succès !'),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          } else {
+            print("⚠️ Transaction déjà existante pour ce portefeuille");
+          }
+        } else {
+          print("❌ Aucun portefeuille trouvé après ajout");
+        }
+      } catch (e) {
+        print("❌ Erreur dans _navigateToWalletVerification: $e");
+        print("📊 Stack trace: ${StackTrace.current}");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur lors de l\'ajout: $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } else {
+      print("⚠️ Result n'est pas true ou widget n'est pas mounted - result: $result, mounted: $mounted");
+    }
+  }
+
   Future<void> _deleteWallet(Wallet wallet) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -201,66 +285,430 @@ Future<void> _navigateToWalletVerification() async {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final total = _wallets.fold<double>(0, (sum, w) => sum + w.balance);
-
-    return MainDrawerWrapper(
-      child: Scaffold(
-        body: Stack(
+  Future<void> _setOrUpdateExpenseLimit(Wallet wallet) async {
+    final controller = TextEditingController(text: wallet.expenseLimit.toStringAsFixed(2));
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Définir/Modifier la limite de dépense'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Column(
+            Text('Portefeuille : ${wallet.name}'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Limite de dépense (FCFA)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newLimit = double.tryParse(controller.text) ?? 0.0;
+              Navigator.pop(context, newLimit);
+            },
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result >= 0) {
+      try {
+        wallet.expenseLimit = result;
+        await WalletDatabase.instance.updateWallet(wallet);
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Limite de dépense mise à jour pour "${wallet.name}" à ${result.toStringAsFixed(2)} FCFA'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur lors de la mise à jour : $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _addExpenseLimit(Wallet wallet) async {
+    final controller = TextEditingController();
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Ajouter un montant à la limite de dépense'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Portefeuille : ${wallet.name}'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Montant à ajouter (FCFA)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () {
+              final amount = double.tryParse(controller.text) ?? 0.0;
+              Navigator.pop(context, amount);
+            },
+            child: const Text('Ajouter'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result > 0) {
+      try {
+        await WalletDatabase.instance.addExpenseLimit(wallet.id!, result);
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ajouté ${result.toStringAsFixed(2)} FCFA à la limite de dépense de "${wallet.name}"'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur lors de l\'ajout : $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _setGlobalExpenseLimit() async {
+    final controller = TextEditingController(text: _wallets.isNotEmpty ? (_wallets.map((w) => w.expenseLimit).reduce((a, b) => a + b)).toStringAsFixed(2) : '0.0');
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Définir la limite globale de dépense'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Cette limite s\'appliquera uniformément à tous les portefeuilles'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Limite globale (FCFA)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newLimit = double.tryParse(controller.text) ?? 0.0;
+              Navigator.pop(context, newLimit);
+            },
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result >= 0 && _wallets.isNotEmpty) {
+      try {
+        for (var wallet in _wallets) {
+          wallet.expenseLimit = result;
+          await WalletDatabase.instance.updateWallet(wallet);
+        }
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Limite globale mise à jour à ${result.toStringAsFixed(2)} FCFA pour tous les portefeuilles'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur lors de la mise à jour : $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _addToGlobalExpenseLimit() async {
+    final controller = TextEditingController();
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Ajouter un montant à la limite globale'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Ce montant sera ajouté uniformément à tous les portefeuilles'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Montant à ajouter (FCFA)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () {
+              final amount = double.tryParse(controller.text) ?? 0.0;
+              Navigator.pop(context, amount);
+            },
+            child: const Text('Ajouter'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result > 0 && _wallets.isNotEmpty) {
+      try {
+        for (var wallet in _wallets) {
+          await WalletDatabase.instance.addExpenseLimit(wallet.id!, result);
+        }
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ajouté ${result.toStringAsFixed(2)} FCFA à la limite globale de tous les portefeuilles'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur lors de l\'ajout : $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Widget _buildTransactionCard(Transaction transaction) {
+    final isIncome = transaction.type == 'income';
+    final color = isIncome ? Colors.green : Colors.red;
+    final icon = isIncome ? Icons.arrow_downward : Icons.arrow_upward;
+    final prefix = isIncome ? '+' : '-';
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: themeColor.withOpacity(0.1), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.08),
+            spreadRadius: 1,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  height: 200,
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF6074F9), Color(0xFF6074F9)],
-                    ),
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(50),
-                      bottomRight: Radius.circular(50),
-                    ),
+                Text(
+                  transaction.description,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const SizedBox(width: 40),
-                              const Text(
-                                'Tableau de bord',
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              buildNotificationAction(context),
-                            ],
-                          ),
-                        ],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        transaction.type.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    Text(
+                      transaction.source,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${transaction.date.day}/${transaction.date.month}/${transaction.date.year}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
                   ),
                 ),
-                Expanded(
-                  child: SingleChildScrollView(
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$prefix${transaction.amount.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'FCFA',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalBalance = _wallets.fold<double>(0, (sum, w) => sum + w.balance);
+    final totalExpenseLimit = _wallets.isNotEmpty ? _wallets.map((w) => w.expenseLimit).reduce((a, b) => a + b) : 0.0;
+    final percentageUsed = _globalWalletLimit > 0 ? (totalBalance / _globalWalletLimit * 100) : 0.0;
+
+    return MainDrawerWrapper(
+      child: SafeArea(
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          body: Stack(
+            children: [
+              Column(
+                children: [
+                  Container(
                     padding: const EdgeInsets.all(20),
+                    color: Colors.white,
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const SizedBox(width: 40),
+                            const Text(
+                              'Tableau de bord',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF6074F9),
+                              ),
+                            ),
+                            buildNotificationAction(context),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: themeColor.withOpacity(0.2), width: 1),
+                            border: Border.all(color: themeColor.withOpacity(0.3), width: 1),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.grey.withOpacity(0.08),
@@ -271,321 +719,531 @@ Future<void> _navigateToWalletVerification() async {
                             ],
                           ),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Solde global',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Limite globale des portefeuilles',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Color(0xFF6074F9),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.settings, color: Color(0xFF6074F9), size: 20),
+                                    onPressed: _setGlobalWalletLimit,
+                                    tooltip: 'Modifier la limite globale',
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    '${totalBalance.toStringAsFixed(2)} FCFA',
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF6074F9),
+                                    ),
+                                  ),
+                                  Text(
+                                    '/ ${_globalWalletLimit.toStringAsFixed(2)} FCFA',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: themeColor.withOpacity(0.8),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              LinearProgressIndicator(
+                                value: percentageUsed / 100,
+                                backgroundColor: Colors.grey[300],
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  percentageUsed > 80 ? Colors.red : themeColor,
+                                ),
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                '${total.toStringAsFixed(2)} FCFA',
+                                '${percentageUsed.toStringAsFixed(1)}% utilisé',
                                 style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: themeColor,
+                                  fontSize: 12,
+                                  color: themeColor.withOpacity(0.8),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Portefeuilles',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                            TextButton.icon(
-                              onPressed: _navigateToWalletVerification,
-                              icon: const Icon(Icons.add, size: 18),
-                              label: const Text('Ajouter'),
-                              style: TextButton.styleFrom(foregroundColor: themeColor),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        if (_wallets.isEmpty)
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(32),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[50],
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.grey[300]!, width: 1),
-                            ),
-                            child: Column(
-                              children: [
-                                Icon(
-                                  Icons.account_balance_wallet_outlined,
-                                  size: 64,
-                                  color: Colors.grey[400],
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Aucun portefeuille',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Ajoutez votre premier portefeuille pour commencer',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.grey[500],
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                ElevatedButton.icon(
-                                  onPressed: _navigateToWalletVerification,
-                                  icon: const Icon(Icons.add, color: Colors.white),
-                                  label: const Text(
-                                    'Ajouter un portefeuille',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: themeColor,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 12,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        else
-                          ..._wallets.map((w) => Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: themeColor.withOpacity(0.2), width: 1),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.withOpacity(0.08),
-                                  spreadRadius: 1,
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 50,
-                                  height: 50,
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: _getWalletColor(w.name).withOpacity(0.1),
-                                    shape: BoxShape.circle,
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: themeColor.withOpacity(0.2), width: 1),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.grey.withOpacity(0.08),
+                                        spreadRadius: 1,
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
                                   ),
-                                  child: Icon(
-                                    _getWalletIcon(w.name),
-                                    color: _getWalletColor(w.name),
-                                    size: 24,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        w.name,
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                      const Text(
+                                        'Solde global',
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF6074F9)),
                                       ),
-                                      const SizedBox(height: 4),
+                                      const SizedBox(height: 8),
                                       Text(
-                                        '${w.balance.toStringAsFixed(2)} FCFA',
+                                        '${totalBalance.toStringAsFixed(2)} FCFA',
                                         style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey[600],
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: themeColor,
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                PopupMenuButton<String>(
-                                  onSelected: (value) {
-                                    if (value == 'delete') {
-                                      _deleteWallet(w);
-                                    }
-                                  },
-                                  itemBuilder: (context) => [
-                                    const PopupMenuItem(
-                                      value: 'delete',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.delete, color: Colors.red, size: 18),
-                                          SizedBox(width: 8),
-                                          Text('Supprimer', style: TextStyle(color: Colors.red)),
+                              ),
+                              const SizedBox(width: 20),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: themeColor.withOpacity(0.2), width: 1),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.grey.withOpacity(0.08),
+                                        spreadRadius: 1,
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Limite globale',
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF6074F9)),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        '${totalExpenseLimit.toStringAsFixed(2)} FCFA',
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: themeColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Mes portefeuilles',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF6074F9),
+                                ),
+                              ),
+                              PopupMenuButton<String>(
+                                onSelected: (value) {
+                                  switch (value) {
+                                    case 'set_global_expense_limit':
+                                      _setGlobalExpenseLimit();
+                                      break;
+                                    case 'add_global_expense_limit':
+                                      _addToGlobalExpenseLimit();
+                                      break;
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: 'set_global_expense_limit',
+                                    child: Text('Définir limite globale de dépense'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'add_global_expense_limit',
+                                    child: Text('Ajouter à la limite globale'),
+                                  ),
+                                ],
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: themeColor,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.more_vert,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : _wallets.isEmpty
+                                  ? Container(
+                                      padding: const EdgeInsets.all(24),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: Colors.grey.withOpacity(0.2),
+                                          width: 1,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.grey.withOpacity(0.08),
+                                            spreadRadius: 1,
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
                                         ],
                                       ),
+                                      child: Column(
+                                        children: [
+                                          Icon(
+                                            Icons.account_balance_wallet_outlined,
+                                            size: 64,
+                                            color: Colors.grey[400],
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            'Aucun portefeuille',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Créez votre premier portefeuille pour commencer',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey[500],
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : ListView.builder(
+                                      shrinkWrap: true,
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      itemCount: _wallets.length,
+                                      itemBuilder: (context, index) {
+                                        final wallet = _wallets[index];
+                                        final expensePercentage = wallet.expenseLimit > 0
+                                            ? (wallet.balance / wallet.expenseLimit * 100)
+                                            : 0.0;
+                                        
+                                        return Container(
+                                          margin: const EdgeInsets.only(bottom: 12),
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(16),
+                                            border: Border.all(
+                                              color: themeColor.withOpacity(0.1),
+                                              width: 1,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.grey.withOpacity(0.08),
+                                                spreadRadius: 1,
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Text(
+                                                          wallet.name,
+                                                          style: const TextStyle(
+                                                            fontSize: 18,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(height: 4),
+                                                        Text(
+                                                          '${wallet.balance.toStringAsFixed(2)} FCFA',
+                                                          style: TextStyle(
+                                                            fontSize: 16,
+                                                            color: themeColor,
+                                                            fontWeight: FontWeight.w600,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  PopupMenuButton<String>(
+                                                    onSelected: (value) {
+                                                      switch (value) {
+                                                        case 'set_expense_limit':
+                                                          _setOrUpdateExpenseLimit(wallet);
+                                                          break;
+                                                        case 'add_expense_limit':
+                                                          _addExpenseLimit(wallet);
+                                                          break;
+                                                        case 'delete':
+                                                          _deleteWallet(wallet);
+                                                          break;
+                                                      }
+                                                    },
+                                                    itemBuilder: (context) => [
+                                                      const PopupMenuItem(
+                                                        value: 'set_expense_limit',
+                                                        child: Text('Définir limite de dépense'),
+                                                      ),
+                                                      const PopupMenuItem(
+                                                        value: 'add_expense_limit',
+                                                        child: Text('Ajouter à la limite'),
+                                                      ),
+                                                      const PopupMenuItem(
+                                                        value: 'delete',
+                                                        child: Text('Supprimer'),
+                                                      ),
+                                                    ],
+                                                    child: Container(
+                                                      padding: const EdgeInsets.all(8),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.grey[100],
+                                                        borderRadius: BorderRadius.circular(8),
+                                                      ),
+                                                      child: const Icon(
+                                                        Icons.more_vert,
+                                                        size: 20,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              if (wallet.expenseLimit > 0) ...[
+                                                const SizedBox(height: 12),
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Text(
+                                                      'Limite de dépense',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey[600],
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      '${wallet.expenseLimit.toStringAsFixed(2)} FCFA',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey[600],
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 8),
+                                                LinearProgressIndicator(
+                                                  value: expensePercentage / 100,
+                                                  backgroundColor: Colors.grey[300],
+                                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                                    expensePercentage > 80 ? Colors.red : themeColor,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '${expensePercentage.toStringAsFixed(1)}% utilisé',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.grey[500],
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        );
+                                      },
                                     ),
-                                  ],
-                                  child: Icon(
-                                    Icons.more_vert,
-                                    color: Colors.grey[400],
-                                  ),
+                          const SizedBox(height: 24),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Transactions récentes',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF6074F9),
                                 ),
-                              ],
-                            ),
-                          )),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Dernières transactions',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 10),
-                        if (_transactions.isEmpty)
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[50],
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.grey[300]!, width: 1),
-                            ),
-                            child: Column(
-                              children: [
-                                Icon(
-                                  Icons.receipt_long_outlined,
-                                  size: 48,
-                                  color: Colors.grey[400],
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'Aucune transaction',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        else
-                          ..._transactions.map((t) => Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: themeColor.withOpacity(0.2), width: 1),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.withOpacity(0.08),
-                                  spreadRadius: 1,
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const HistoryScreen(),
+                                    ),
+                                  );
+                                },
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
-                                      '${t.type.toUpperCase()}',
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      'Voir tout',
+                                      style: TextStyle(
+                                        color: themeColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
-                                    Text(
-                                      '${t.source} • ${t.description}',
-                                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.arrow_forward_ios,
+                                      size: 16,
+                                      color: themeColor,
                                     ),
                                   ],
                                 ),
-                                Text(
-                                  '${t.date.day}/${t.date.month}/${t.date.year}',
-                                  style: const TextStyle(fontSize: 14),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _transactions.isEmpty
+                              ? Container(
+                                  padding: const EdgeInsets.all(24),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Colors.grey.withOpacity(0.2),
+                                      width: 1,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.grey.withOpacity(0.08),
+                                        spreadRadius: 1,
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        Icons.receipt_long_outlined,
+                                        size: 64,
+                                        color: Colors.grey[400],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Aucune transaction',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Vos transactions récentes apparaîtront ici',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[500],
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: _transactions.length,
+                                  itemBuilder: (context, index) {
+                                    return _buildTransactionCard(_transactions[index]);
+                                  },
                                 ),
-                              ],
-                            ),
-                          )),
-                      ],
+                          const SizedBox(height: 100),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      FloatingActionButton(
-                        heroTag: 'wallet',
-                        onPressed: _navigateToWalletVerification,
-                        backgroundColor: themeColor,
-                        child: const Icon(Icons.account_balance_wallet, color: Colors.white),
-                      ),
-                      const SizedBox(width: 10),
-                      FloatingActionButton(
-                        heroTag: 'transaction',
-                        onPressed: () => Navigator.push(
+                ],
+              ),
+              Positioned(
+                bottom: 20,
+                right: 20,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FloatingActionButton(
+                      onPressed: () {
+                        Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const AddTransactionScreen()),
-                        ).then((_) => _loadData()),
-                        backgroundColor: themeColor,
-                        child: const Icon(Icons.add, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (_isLoading)
-              Container(
-                color: Colors.black.withOpacity(0.5),
-                child: const Center(
-                  child: CircularProgressIndicator(color: Color(0xFF6074F9)),
+                          MaterialPageRoute(
+                            builder: (_) => const AddTransactionScreen(),
+                          ),
+                        ).then((_) => _loadData());
+                      },
+                      backgroundColor: themeColor,
+                      heroTag: "add_transaction",
+                      child: const Icon(Icons.add, color: Colors.white),
+                    ),
+                    const SizedBox(height: 12),
+                    FloatingActionButton(
+                      onPressed: _navigateToWalletVerification,
+                      backgroundColor: themeColor,
+                      heroTag: "add_wallet",
+                      child: const Icon(Icons.account_balance_wallet, color: Colors.white),
+                    ),
+                  ],
                 ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
-  }
-
-  IconData _getWalletIcon(String walletName) {
-    switch (walletName.toLowerCase()) {
-      case 'orange money':
-        return Icons.phone_android;
-      case 'mtn momo':
-        return Icons.smartphone;
-      case 'carte bancaire':
-        return Icons.credit_card;
-      case 'espèces':
-        return Icons.account_balance_wallet;
-      default:
-        return Icons.account_balance_wallet;
-    }
-  }
-
-  Color _getWalletColor(String walletName) {
-    switch (walletName.toLowerCase()) {
-      case 'orange money':
-        return Colors.orange;
-      case 'mtn momo':
-        return Colors.yellow.shade700;
-      case 'carte bancaire':
-        return Colors.blue;
-      case 'espèces':
-        return Colors.green;
-      default:
-        return themeColor;
-    }
   }
 }

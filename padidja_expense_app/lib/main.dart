@@ -7,6 +7,7 @@ import 'package:padidja_expense_app/screens/auth_screen.dart';
 import 'package:padidja_expense_app/screens/history_screen.dart';
 import 'package:padidja_expense_app/screens/home_screen.dart';
 import 'package:padidja_expense_app/screens/home_wallet_screen.dart';
+import 'package:padidja_expense_app/screens/minepat_budget_screen.dart';
 import 'package:padidja_expense_app/screens/setting_screen.dart';
 import 'package:padidja_expense_app/screens/spend_line_screen.dart';
 import 'package:padidja_expense_app/screens/splash_screen.dart';
@@ -14,8 +15,6 @@ import 'package:padidja_expense_app/screens/stats_screen.dart';
 import 'package:padidja_expense_app/screens/user_page_screen.dart';
 import 'package:padidja_expense_app/screens/verify_wallet_screen.dart';
 import 'services/database_service.dart';
-
-
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,26 +37,25 @@ class PadidjaApp extends StatelessWidget {
           border: OutlineInputBorder(),
         ),
       ),
-
-      // Ajoute ceci 👇
-      initialRoute: '/',
+      initialRoute: '/login', // Start with login, then navigate to verification
       routes: {
         '/': (context) => const SplashScreen(),
         '/login': (context) => const AuthScreen(),
         '/home': (context) => const HomeScreen(),
         '/add': (context) => const AddExpenseScreen(),
         '/stats': (context) => const StatsScreen(),
-        '/history': (context) =>  HistoryScreen(),
-        '/adduser': (context) =>  UserFormPage(),
-        '/userpage': (context) =>  UserListPage (),
-        '/spendline': (context) =>  SpendLinePage(),
-        '/settings': (context) =>  const SettingsPage(),
-        '/addwallet': (context) =>  const AddWalletScreen(),
-        '/addTransaction': (context) =>  const AddTransactionScreen(),
-        '/wallets': (context) =>  const WalletHomeScreen(),
-        '/verifyWallet': (context) =>  const WalletVerificationScreen (),
-
-
+        '/history': (context) => const HistoryScreen(),
+        '/adduser': (context) => UserFormPage(),
+        '/userpage': (context) => UserListPage(),
+        '/spendline': (context) => const SpendLinePage(),
+        '/settings': (context) => const SettingsPage(),
+        '/addwallet': (context) => const AddWalletScreen(),
+        '/addTransaction': (context) => const AddTransactionScreen(),
+        '/wallets': (context) => const WalletHomeScreen(),
+        '/verifyWallet': (context) => const WalletVerificationScreen(
+              currentTotalBalance: 0.0,
+              globalWalletLimit: double.infinity,
+            ),
       },
     );
   }

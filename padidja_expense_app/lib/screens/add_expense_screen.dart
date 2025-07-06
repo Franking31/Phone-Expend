@@ -305,7 +305,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                                     ScaffoldMessenger.of(innerContext).showSnackBar(
                                       const SnackBar(content: Text('Ligne de dépense ajoutée ✅')),
                                     );
-                                    Navigator.pop(innerContext);
+                                    // Retourner true pour indiquer que la dépense a été ajoutée
+                                    Navigator.pop(innerContext, true);
                                   }
                                 } catch (e) {
                                   print("Erreur lors de l'insertion: $e");

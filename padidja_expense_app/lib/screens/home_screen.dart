@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../widgets/main_drawer_wrapper.dart';
 import '../services/wallet_database.dart'; 
-import '../models/transaction.dart'; // Import pour le modèle Transaction
+import '../services/spend_line_database.dart';
+import '../models/transaction.dart';
+// Removed unused import: '../models/spend_line.dart'
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,7 +14,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String _selectedType = 'all'; // Par défaut, affiche tous les types
+  String _selectedType = 'all';
 
   // Méthode pour récupérer la somme totale des portefeuilles
   Future<double> _getTotalBalance() async {
@@ -22,20 +24,63 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Méthode pour récupérer les transactions filtrées
   Future<List<Transaction>> _getFilteredTransactions() async {
-    final transactions = await WalletDatabase.instance.getLatestTransactions(10); // Limite à 10 pour l'exemple
+    final transactions = await WalletDatabase.instance.getLatestTransactions(10);
+    
+    if (_selectedType == 'outcome') {
+      // Inclure les dépenses des transactions ET des spend_lines
+      final spendLines = await SpendLineDatabase.instance.getAll();
+      final outcomeTransactions = transactions.where((tx) => tx.type.toLowerCase() == 'outcome').toList();
+      
+      // Convertir les SpendLine en Transaction pour l'affichage
+      final spendLineTransactions = spendLines.take(10 - outcomeTransactions.length).map((spend) =>
+        Transaction(
+          id: spend.id,
+          amount: spend.budget,
+          description: spend.description,
+          date: spend.date,
+          type: 'outcome',
+          source: 'spend_line', // Added missing required parameter
+        )
+      ).toList();
+      
+      return [...outcomeTransactions, ...spendLineTransactions];
+    }
+    
     if (_selectedType == 'all') return transactions;
     return transactions.where((tx) => tx.type.toLowerCase() == _selectedType.toLowerCase()).toList();
   }
 
-  // Méthode pour calculer la variation et le solde restant basé sur le total actuel
-  Future<Map<String, double>> _calculateWeeklyVariation() async {
-    final currentTotal = await _getTotalBalance();
-    // Le "Solde restant" est simplement le total actuel (pas de référence historique)
-    final remaining = currentTotal;
-    // Variation par rapport à zéro (initialement)
-    final variation = currentTotal > 0 ? 100.0 : 0.0; // Simplification : 100% si positif, 0% si zéro
-
-    return {'variation': variation, 'remaining': remaining};
+  // Méthode pour calculer les totaux incluant les spend_lines
+  Future<Map<String, double>> _calculateTotals() async {
+    final transactions = await WalletDatabase.instance.getLatestTransactions(1000);
+    final spendLines = await SpendLineDatabase.instance.getAll();
+    
+    double totalIncome = 0.0;
+    double totalOutcome = 0.0;
+    
+    // Calculer les revenus et dépenses des transactions
+    for (var tx in transactions) {
+      if (tx.type == 'income') {
+        totalIncome += tx.amount;
+      } else if (tx.type == 'outcome') {
+        totalOutcome += tx.amount;
+      }
+    }
+    
+    // Ajouter les dépenses des spend_lines
+    for (var spend in spendLines) {
+      totalOutcome += spend.budget;
+    }
+    
+    final remaining = totalIncome - totalOutcome;
+    final variation = totalIncome > 0 ? ((remaining / totalIncome) * 100) : 0.0;
+    
+    return {
+      'income': totalIncome,
+      'outcome': totalOutcome,
+      'variation': variation,
+      'remaining': remaining
+    };
   }
 
   void _setTransactionType(String type) {
@@ -48,11 +93,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _deleteWallet(int walletId) async {
     try {
       await WalletDatabase.instance.deleteWallet(walletId);
-      setState(() {}); // Rafraîchir l'état pour recalculer les soldes
+      if (mounted) { // Added mounted check
+        setState(() {});
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur lors de la suppression : $e")),
-      );
+      if (mounted) { // Added mounted check
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Erreur lors de la suppression : $e")),
+        );
+      }
     }
   }
 
@@ -135,9 +184,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _savingsCard(transactions, total),
+                            _savingsCard(),
                             const SizedBox(height: 15),
-                            _savingsCard(transactions, total),
+                            _savingsCard(),
                             const Padding(
                               padding: EdgeInsets.fromLTRB(0, 30, 0, 20),
                               child: Row(
@@ -160,8 +209,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                           fontSize: 14,
                                         ),
                                       ),
-                                      const SizedBox(width: 5),
-                                      const Icon(
+                                      SizedBox(width: 5), // Removed unnecessary const
+                                      Icon(
                                         Icons.arrow_forward_ios,
                                         color: Colors.grey,
                                         size: 14,
@@ -220,15 +269,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _savingsCard(List<Transaction> transactions, double totalBalance) {
-    final totalAmount = transactions.fold<double>(0, (sum, tx) => sum + tx.amount);
+  Widget _savingsCard() {
     return FutureBuilder<Map<String, double>>(
-      future: _calculateWeeklyVariation(),
+      future: _calculateTotals(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const CircularProgressIndicator();
-        final variationData = snapshot.data!;
-        final variation = variationData['variation']!;
-        final remaining = variationData['remaining']!;
+        final totals = snapshot.data!;
+        final remaining = totals['remaining']!;
+        final variation = totals['variation']!;
+        final totalIncome = totals['income']!;
+        final totalOutcome = totals['outcome']!;
         final isGain = remaining >= 0;
 
         return Padding(
@@ -266,18 +316,47 @@ class _HomeScreenState extends State<HomeScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text("Deposit", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                        const Text("Revenus", style: TextStyle(color: Colors.grey, fontSize: 14)),
                         const SizedBox(height: 5),
-                        Text("\$${totalBalance.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text("\$${totalIncome.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       ],
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text("Rate", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                        const Text("Dépenses", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                        const SizedBox(height: 5),
+                        Text("\$${totalOutcome.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 15),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Solde", style: TextStyle(color: Colors.grey, fontSize: 14)),
                         const SizedBox(height: 5),
                         Text(
-                          "${variation.abs().toStringAsFixed(2)}% ${isGain ? '(Gain)' : '(Perte)'}",
+                          "\$${remaining.toStringAsFixed(2)}",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: isGain ? Colors.green : Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text("Taux", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                        const SizedBox(height: 5),
+                        Text(
+                          "${variation.abs().toStringAsFixed(1)}%",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -289,11 +368,31 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  "Solde restant: \$${remaining.toStringAsFixed(2)} ${remaining >= 0 ? '(Économie)' : '(Déficit)'}",
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: remaining >= 0 ? Colors.green : Colors.red,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isGain ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isGain ? Icons.trending_up : Icons.trending_down,
+                        color: isGain ? Colors.green : Colors.red,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isGain ? "Vous économisez de l'argent !" : "Attention, vous êtes en déficit !",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isGain ? Colors.green.shade700 : Colors.red.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -326,23 +425,54 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    transaction?.description ?? "Aucune transaction",
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    transaction?.date.toString().split(' ')[0] ?? "N/A",
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
             Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  transaction?.description ?? "No transaction",
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                  transaction != null ? "${transaction.amount >= 0 ? '+' : '-'}\$${transaction.amount.abs().toStringAsFixed(2)}" : "\$0.00",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: transaction != null && transaction.type == 'outcome' ? Colors.red : Colors.green,
+                  ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  transaction?.date.toString() ?? "N/A",
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: transaction != null && transaction.type == 'outcome' 
+                        ? Colors.red.withValues(alpha: 0.1) 
+                        : Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    transaction?.type.toUpperCase() ?? "N/A",
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: transaction != null && transaction.type == 'outcome' ? Colors.red : Colors.green,
+                    ),
+                  ),
                 ),
               ],
-            ),
-            Text(
-              transaction != null ? "${transaction.amount >= 0 ? '+' : '-'}\$${transaction.amount.abs().toStringAsFixed(2)}" : "0.00",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ],
         ),
