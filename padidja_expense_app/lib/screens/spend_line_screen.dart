@@ -5,6 +5,8 @@ import 'add_expense_screen.dart';
 import 'edit_spend_line_screen.dart';
 import '../models/spend_line.dart';
 import '../services/spend_line_database.dart';
+import 'package:share_plus/share_plus.dart';
+import 'dart:io';
 
 class SpendLinePage extends StatefulWidget {
   const SpendLinePage({super.key});
@@ -15,10 +17,9 @@ class SpendLinePage extends StatefulWidget {
 
 class _SpendLinePageState extends State<SpendLinePage> {
   final TextEditingController _searchController = TextEditingController();
-
-  // Supprimé la liste hardcodée qui n'était pas utilisée
   List<SpendLine> _spendLines = [];
-  List<SpendLine> filteredSpendLines = [];
+  List<SpendLine> _filteredSpendLines = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -28,20 +29,81 @@ class _SpendLinePageState extends State<SpendLinePage> {
   }
 
   Future<void> _loadSpendLines() async {
-    final lines = await SpendLineDatabase.instance.getAll();
-    setState(() {
-      _spendLines = lines;
-      filteredSpendLines = lines;
-    });
+    try {
+      setState(() => _isLoading = true);
+      final lines = await SpendLineDatabase.instance.getAll();
+      if (mounted) {
+        setState(() {
+          _spendLines = lines;
+          _filteredSpendLines = lines;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading spend lines: $e')),
+        );
+      }
+    }
   }
 
   void _filterSpendLines() {
     final query = _searchController.text.toLowerCase();
     setState(() {
-      filteredSpendLines = _spendLines.where((line) =>
+      _filteredSpendLines = _spendLines.where((line) =>
           line.name.toLowerCase().contains(query) ||
           line.description.toLowerCase().contains(query)).toList();
     });
+  }
+
+  Future<void> _shareSpendLine(SpendLine line) async {
+    final spendLineText = '''
+Spend Line Details:
+- Name: ${line.name}
+- Budget: ${line.budget.toStringAsFixed(2)} FCFA
+- Description: ${line.description}
+- Date: ${line.date}
+${line.proof.isNotEmpty ? '- Proof: ${line.proof.split('/').last}' : ''}
+''';
+
+    try {
+      if (line.proof.isNotEmpty && await File(line.proof).exists()) {
+        await Share.shareXFiles(
+          [XFile(line.proof)],
+          text: spendLineText,
+          subject: 'Spend Line: ${line.name}',
+        );
+      } else {
+        await Share.share(
+          spendLineText,
+          subject: 'Spend Line: ${line.name}',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sharing spend line: $e')),
+        );
+      }
+    }
+  }
+
+  void _showFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Filter Options'),
+        content: const Text('Filter functionality will be implemented here'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -86,10 +148,10 @@ class _SpendLinePageState extends State<SpendLinePage> {
                             child: Container(
                               height: 45,
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
+                                color: Colors.white.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(25),
                                 border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.3),
+                                  color: Colors.white.withOpacity(0.3),
                                   width: 1,
                                 ),
                               ),
@@ -119,17 +181,15 @@ class _SpendLinePageState extends State<SpendLinePage> {
                             height: 45,
                             width: 45,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
+                              color: Colors.white.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.3),
+                                color: Colors.white.withOpacity(0.3),
                                 width: 1,
                               ),
                             ),
                             child: IconButton(
-                              onPressed: () {
-                                // Action filtre
-                              },
+                              onPressed: _showFilterDialog,
                               icon: const Icon(
                                 Icons.tune,
                                 color: Colors.white,
@@ -156,13 +216,17 @@ class _SpendLinePageState extends State<SpendLinePage> {
                       width: 120,
                       height: 45,
                       child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
+                        onPressed: () async {
+                          final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => const AddExpenseScreen(),
                             ),
-                          ).then((_) => _loadSpendLines()); // Recharger après ajout
+                          );
+                          // Recharger après ajout si nécessaire
+                          if (result == true) {
+                            _loadSpendLines();
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF6074F9),
@@ -200,11 +264,11 @@ class _SpendLinePageState extends State<SpendLinePage> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF6074F9).withValues(alpha: 0.1),
+                            color: const Color(0xFF6074F9).withOpacity(0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            '${filteredSpendLines.length}',
+                            '${_filteredSpendLines.length}',
                             style: const TextStyle(
                               color: Color(0xFF6074F9),
                               fontWeight: FontWeight.bold,
@@ -216,40 +280,51 @@ class _SpendLinePageState extends State<SpendLinePage> {
                     const SizedBox(height: 20),
                     // Liste des lignes budgétaires
                     Expanded(
-                      child: filteredSpendLines.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.search_off,
-                                    size: 64,
-                                    color: Colors.grey[400],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    _searchController.text.isEmpty
-                                        ? 'No budget lines'
-                                        : 'No results found',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
+                      child: _isLoading
+                          ? const Center(
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF6074F9),
+                                ),
                               ),
                             )
-                          : ListView.builder(
-                              itemCount: filteredSpendLines.length,
-                              itemBuilder: (context, index) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: _buildSpendLineItem(
-                                    filteredSpendLines[index], // Correction: pas de cast
+                          : _filteredSpendLines.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.search_off,
+                                        size: 64,
+                                        color: Colors.grey[400],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        _searchController.text.isEmpty
+                                            ? 'No budget lines'
+                                            : 'No results found',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                );
-                              },
-                            ),
+                                )
+                              : RefreshIndicator(
+                                  onRefresh: _loadSpendLines,
+                                  child: ListView.builder(
+                                    itemCount: _filteredSpendLines.length,
+                                    itemBuilder: (context, index) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 12),
+                                        child: _buildSpendLineItem(
+                                          _filteredSpendLines[index],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
                     ),
                   ],
                 ),
@@ -267,12 +342,12 @@ class _SpendLinePageState extends State<SpendLinePage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFF6074F9).withValues(alpha: 0.2),
+          color: const Color(0xFF6074F9).withOpacity(0.2),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.08),
+            color: Colors.grey.withOpacity(0.08),
             spreadRadius: 1,
             blurRadius: 8,
             offset: const Offset(0, 2),
@@ -283,7 +358,9 @@ class _SpendLinePageState extends State<SpendLinePage> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () {},
+          onTap: () {
+            // Navigation vers les détails si nécessaire
+          },
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -293,7 +370,7 @@ class _SpendLinePageState extends State<SpendLinePage> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6074F9).withValues(alpha: 0.1),
+                    color: const Color(0xFF6074F9).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -315,34 +392,56 @@ class _SpendLinePageState extends State<SpendLinePage> {
                           fontWeight: FontWeight.w500,
                           color: Colors.black87,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Budget : ${line.budget.toStringAsFixed(2)} FCFA',
+                        'Budget: ${line.budget.toStringAsFixed(2)} FCFA',
                         style: const TextStyle(
                           fontSize: 14,
                           color: Colors.grey,
                         ),
                       ),
+                      if (line.description.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          line.description,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
                   ),
                 ),
                 // Actions
-                IconButton(
-                  icon: const Icon(Icons.edit, color: Color(0xFF6074F9)),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => EditSpendLineScreen(spendLine: line),
-                      ),
-                    ).then((result) {
-                      // Recharger la liste si des modifications ont été effectuées
-                      if (result == true) {
-                        _loadSpendLines();
-                      }
-                    });
-                  },
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: Color(0xFF6074F9)),
+                      onPressed: () async {
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => EditSpendLineScreen(spendLine: line),
+                          ),
+                        );
+                        // Recharger la liste si des modifications ont été effectuées
+                        if (result == true) {
+                          _loadSpendLines();
+                        }
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.share, color: Color(0xFF6074F9)),
+                      onPressed: () => _shareSpendLine(line),
+                    ),
+                  ],
                 ),
               ],
             ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../services/wallet_database.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 
 class PetiteCaisseBudgetScreen extends StatefulWidget {
@@ -42,11 +43,15 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
         _sortBudgets();
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur de chargement : $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur de chargement : $e')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -60,13 +65,13 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
             compare = (a['amount'] as double).compareTo(b['amount'] as double);
             break;
           case 'category':
-            compare = a['category'].compareTo(b['category']);
+            compare = (a['category'] ?? '').compareTo(b['category'] ?? '');
             break;
           case 'nom':
-            compare = a['nom'].compareTo(b['nom']);
+            compare = (a['nom'] ?? '').compareTo(b['nom'] ?? '');
             break;
           default:
-            compare = a['date'].compareTo(b['date']);
+            compare = (a['date'] ?? '').compareTo(b['date'] ?? '');
         }
         return _sortAscending ? compare : -compare;
       });
@@ -86,54 +91,52 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur lors de la sélection du fichier : $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de la sélection du fichier : $e')),
+        );
+      }
     }
   }
 
   Future<void> _saveBudget() async {
-    print("Début de _saveBudget()");
-    if (!_formKey.currentState!.validate()) {
-      print("Validation échouée");
+    if (!_formKey.currentState!.validate()) return;
+    
+    final amountText = _budgetController.text.trim();
+    final amount = double.tryParse(amountText);
+    if (amount == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Montant invalide')),
+      );
       return;
     }
-    print("Validation réussie");
-    final amount = double.parse(_budgetController.text);
-    final category = _categoryController.text.isEmpty ? 'General' : _categoryController.text;
-    final budgetName = _nameController.text.isEmpty ? 'Sans nom' : _nameController.text;
+
+    final category = _categoryController.text.trim().isEmpty ? 'General' : _categoryController.text.trim();
+    final budgetName = _nameController.text.trim().isEmpty ? 'Sans nom' : _nameController.text.trim();
     final budgetData = {
       'source': 'Petite caisse',
       'amount': amount,
       'category': category,
       'nom': budgetName,
-      'description': _descriptionController.text,
+      'description': _descriptionController.text.trim(),
       'justificatif': _selectedFilePath ?? '',
       'date': DateTime.now().toIso8601String(),
     };
 
     try {
-      print("Ouverture de la base de données");
       final db = await WalletDatabase.instance.database;
       int budgetId;
       if (_editingBudgetId != null) {
-        print("Mise à jour du budget avec ID: $_editingBudgetId");
         await db.update('budgets', budgetData, where: 'id = ?', whereArgs: [_editingBudgetId]);
         budgetId = _editingBudgetId!;
         setState(() => _editingBudgetId = null);
       } else {
-        print("Insertion d'un nouveau budget");
         budgetId = await db.insert('budgets', budgetData);
       }
-      _budgetController.clear();
-      _categoryController.clear();
-      _nameController.clear();
-      _descriptionController.clear();
-      _justificatifController.clear();
-      _selectedFilePath = null;
+      
+      _clearForm();
       await _loadBudgets();
 
-      // Ajouter une transaction pour le budget
       final transaction = {
         'type': 'income',
         'source': 'Petite caisse',
@@ -141,46 +144,62 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
         'description': 'Ajout de budget Petite caisse: $budgetName',
         'date': DateTime.now().toIso8601String(),
       };
-      print("Tentative d'insertion de la transaction: $transaction");
       final transactionId = await db.insert('transactions', transaction);
-      print("Transaction insérée avec ID: $transactionId");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Budget "$budgetName" enregistré avec succès. Transaction ID: $transactionId'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      // Recharger les données dans home_wallet_screen.dart
-      Navigator.pop(context, true); // Retourner true pour déclencher le rechargement
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Budget "$budgetName" enregistré avec succès. Transaction ID: $transactionId'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
     } catch (e) {
-      print("Erreur lors de l'enregistrement ou de l'insertion de la transaction: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur lors de l\'enregistrement : $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'enregistrement : $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
-    print("Fin de _saveBudget()");
+  }
+
+  void _clearForm() {
+    _budgetController.clear();
+    _categoryController.clear();
+    _nameController.clear();
+    _descriptionController.clear();
+    _justificatifController.clear();
+    _selectedFilePath = null;
   }
 
   Future<void> _editBudget(int id) async {
-    final db = await WalletDatabase.instance.database;
-    final budget = await db.query('budgets', where: 'id = ?', whereArgs: [id], limit: 1);
-    if (budget.isNotEmpty) {
-      setState(() {
-        _editingBudgetId = budget.first['id'] as int;
-        _budgetController.text = (budget.first['amount'] as double).toString();
-        _categoryController.text = budget.first['category'] as String;
-        _nameController.text = budget.first['nom'] as String;
-        _descriptionController.text = budget.first['description'] as String;
-        _justificatifController.text = budget.first['justificatif'] as String;
-        _selectedFilePath = budget.first['justificatif'] as String;
-      });
-      _showAddBudgetDialog();
+    try {
+      final db = await WalletDatabase.instance.database;
+      final budget = await db.query('budgets', where: 'id = ?', whereArgs: [id], limit: 1);
+      if (budget.isNotEmpty) {
+        setState(() {
+          _editingBudgetId = budget.first['id'] as int;
+          _budgetController.text = (budget.first['amount'] as double).toString();
+          _categoryController.text = budget.first['category'] as String? ?? '';
+          _nameController.text = budget.first['nom'] as String? ?? '';
+          _descriptionController.text = budget.first['description'] as String? ?? '';
+          _justificatifController.text = budget.first['justificatif'] as String? ?? '';
+          _selectedFilePath = budget.first['justificatif'] as String? ?? '';
+        });
+        _showAddBudgetDialog();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de la modification : $e')),
+        );
+      }
     }
   }
 
@@ -191,7 +210,10 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
         title: const Text('Supprimer le budget'),
         content: const Text('Êtes-vous sûr de vouloir supprimer ce budget ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false), 
+            child: const Text('Annuler')
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -206,8 +228,52 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
         await db.delete('budgets', where: 'id = ?', whereArgs: [id]);
         await _loadBudgets();
       } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erreur lors de la suppression : $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _shareBudget(Map<String, dynamic> budget) async {
+    final budgetText = '''
+Budget Petite Caisse Details:
+- Name: ${budget['nom'] ?? 'Sans nom'}
+- Amount: ${budget['amount']} FCFA
+- Category: ${budget['category'] ?? 'Non spécifiée'}
+- Description: ${budget['description'] ?? 'Aucune description'}
+- Date: ${budget['date']}
+${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justificatif: ${budget['justificatif'].split('/').last}' : ''}
+''';
+
+    try {
+      final justificatif = budget['justificatif'] as String?;
+      if (justificatif != null && justificatif.isNotEmpty) {
+        final file = File(justificatif);
+        if (await file.exists()) {
+          await Share.shareXFiles(
+            [XFile(justificatif)],
+            text: budgetText,
+            subject: 'Petite Caisse Budget: ${budget['nom'] ?? 'Sans nom'}',
+          );
+        } else {
+          await Share.share(
+            budgetText,
+            subject: 'Petite Caisse Budget: ${budget['nom'] ?? 'Sans nom'}',
+          );
+        }
+      } else {
+        await Share.share(
+          budgetText,
+          subject: 'Petite Caisse Budget: ${budget['nom'] ?? 'Sans nom'}',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la suppression : $e')),
+          SnackBar(content: Text('Erreur lors du partage : $e')),
         );
       }
     }
@@ -230,18 +296,32 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
                     labelText: 'Nom',
                     border: OutlineInputBorder(),
                   ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Entrez un nom';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _budgetController,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                     labelText: 'Montant',
                     border: OutlineInputBorder(),
+                    suffixText: 'FCFA',
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty) return 'Entrez un montant';
-                    if (double.tryParse(value) == null) return 'Montant invalide';
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Entrez un montant';
+                    }
+                    if (double.tryParse(value.trim()) == null) {
+                      return 'Montant invalide';
+                    }
+                    if (double.parse(value.trim()) <= 0) {
+                      return 'Le montant doit être positif';
+                    }
                     return null;
                   },
                 ),
@@ -282,12 +362,7 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              _budgetController.clear();
-              _categoryController.clear();
-              _nameController.clear();
-              _descriptionController.clear();
-              _justificatifController.clear();
-              _selectedFilePath = null;
+              _clearForm();
               setState(() => _editingBudgetId = null);
               Navigator.pop(context);
             },
@@ -316,22 +391,26 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Nom: ${budget['nom']}'),
+              Text('Nom: ${budget['nom'] ?? 'Sans nom'}'),
               const SizedBox(height: 8),
               Text('Montant: ${budget['amount']} FCFA'),
               const SizedBox(height: 8),
-              Text('Catégorie: ${budget['category']}'),
+              Text('Catégorie: ${budget['category'] ?? 'Non spécifiée'}'),
               const SizedBox(height: 8),
-              Text('Description: ${budget['description']}'),
+              Text('Description: ${budget['description'] ?? 'Aucune description'}'),
               const SizedBox(height: 8),
               if (budget['justificatif'] != null && budget['justificatif'].isNotEmpty)
                 Text('Justificatif: ${budget['justificatif'].split('/').last}'),
               const SizedBox(height: 8),
-              Text('Date: ${budget['date']}'),
+              Text('Date: ${budget['date'] ?? 'Non spécifiée'}'),
             ],
           ),
         ),
         actions: [
+          TextButton(
+            onPressed: () => _shareBudget(budget),
+            child: const Text('Partager'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Fermer'),
@@ -343,7 +422,7 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final totalBudget = _budgets.fold(0.0, (sum, b) => sum + (b['amount'] as double));
+    final totalBudget = _budgets.fold(0.0, (sum, b) => sum + (b['amount'] as double? ?? 0.0));
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
@@ -389,10 +468,10 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.3),
+                          color: Colors.white.withOpacity(0.3),
                           width: 1,
                         ),
                       ),
@@ -437,12 +516,7 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
                         child: ElevatedButton(
                           onPressed: () {
                             setState(() => _editingBudgetId = null);
-                            _budgetController.clear();
-                            _categoryController.clear();
-                            _nameController.clear();
-                            _descriptionController.clear();
-                            _justificatifController.clear();
-                            _selectedFilePath = null;
+                            _clearForm();
                             _showAddBudgetDialog();
                           },
                           style: ElevatedButton.styleFrom(
@@ -470,7 +544,7 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(25),
                           border: Border.all(
-                            color: const Color(0xFF6074F9).withValues(alpha: 0.2),
+                            color: const Color(0xFF6074F9).withOpacity(0.2),
                           ),
                         ),
                         child: DropdownButton<String>(
@@ -523,7 +597,7 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6074F9).withValues(alpha: 0.1),
+                          color: const Color(0xFF6074F9).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -588,12 +662,12 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFF6074F9).withValues(alpha: 0.2),
+          color: const Color(0xFF6074F9).withOpacity(0.2),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.08),
+            color: Colors.grey.withOpacity(0.08),
             spreadRadius: 1,
             blurRadius: 8,
             offset: const Offset(0, 2),
@@ -613,7 +687,7 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6074F9).withValues(alpha: 0.1),
+                    color: const Color(0xFF6074F9).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -628,7 +702,7 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        budget['nom'],
+                        budget['nom'] ?? 'Sans nom',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -637,14 +711,14 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Montant: ${budget['amount']} FCFA',
+                        'Montant: ${budget['amount'] ?? 0} FCFA',
                         style: const TextStyle(
                           fontSize: 14,
                           color: Colors.grey,
                         ),
                       ),
                       Text(
-                        'Date: ${budget['date']}',
+                        'Date: ${budget['date'] ?? 'Non spécifiée'}',
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.grey,

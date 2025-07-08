@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../services/wallet_database.dart';
-import 'package:file_picker/file_picker.dart'; // Retenir cet import si nécessaire
+import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
+import 'dart:io';
 
 class MinepatBudgetScreen extends StatefulWidget {
   const MinepatBudgetScreen({super.key});
@@ -65,13 +67,13 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
             compare = (a['amount'] as double).compareTo(b['amount'] as double);
             break;
           case 'category':
-            compare = a['category'].compareTo(b['category']);
+            compare = (a['category'] ?? '').compareTo(b['category'] ?? '');
             break;
           case 'nom':
-            compare = a['nom'].compareTo(b['nom']);
+            compare = (a['nom'] ?? '').compareTo(b['nom'] ?? '');
             break;
           default:
-            compare = a['date'].compareTo(b['date']);
+            compare = (a['date'] ?? '').compareTo(b['date'] ?? '');
         }
         return _sortAscending ? compare : -compare;
       });
@@ -100,12 +102,7 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
   }
 
   Future<void> _saveBudget() async {
-    // print("Début de _saveBudget()"); // Remplacer par un logger
-    if (!_formKey.currentState!.validate()) {
-      // print("Validation échouée");
-      return;
-    }
-    // print("Validation réussie");
+    if (!_formKey.currentState!.validate()) return;
     final amount = double.parse(_budgetController.text);
     final category = _categoryController.text.isEmpty ? 'General' : _categoryController.text;
     final budgetName = _nameController.text.isEmpty ? 'Sans nom' : _nameController.text;
@@ -117,17 +114,14 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
       'description': _descriptionController.text,
       'justificatif': _selectedFilePath ?? '',
       'date': DateTime.now().toIso8601String(),
-    }; // Suppression de 'startDate' et 'endDate'
+    };
 
     try {
-      // print("Ouverture de la base de données");
       final db = await WalletDatabase.instance.database;
       if (_editingBudgetId != null) {
-        // print("Mise à jour du budget avec ID: $_editingBudgetId");
         await db.update('budgets', budgetData, where: 'id = ?', whereArgs: [_editingBudgetId]);
         setState(() => _editingBudgetId = null);
       } else {
-        // print("Insertion d'un nouveau budget");
         await db.insert('budgets', budgetData);
       }
       _budgetController.clear();
@@ -138,7 +132,6 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
       _selectedFilePath = null;
       await _loadBudgets();
 
-      // Ajouter une transaction pour le budget
       final transaction = {
         'type': 'income',
         'source': 'MINEPAT',
@@ -146,9 +139,7 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
         'description': 'Ajout de budget MINEPAT: $budgetName',
         'date': DateTime.now().toIso8601String(),
       };
-      // print("Tentative d'insertion de la transaction: $transaction");
       final transactionId = await db.insert('transactions', transaction);
-      // print("Transaction insérée avec ID: $transactionId");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -159,10 +150,8 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
         );
       }
 
-      // Retourner true pour signaler un rechargement dans home_wallet_screen.dart
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      // print("Erreur lors de l'enregistrement ou de l'insertion de la transaction: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -173,7 +162,6 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
         );
       }
     }
-    // print("Fin de _saveBudget()");
   }
 
   Future<void> _editBudget(int id) async {
@@ -183,11 +171,11 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
       setState(() {
         _editingBudgetId = budget.first['id'] as int;
         _budgetController.text = (budget.first['amount'] as double).toString();
-        _categoryController.text = budget.first['category'] as String;
-        _nameController.text = budget.first['nom'] as String;
-        _descriptionController.text = budget.first['description'] as String;
-        _justificatifController.text = budget.first['justificatif'] as String;
-        _selectedFilePath = budget.first['justificatif'] as String;
+        _categoryController.text = budget.first['category'] as String? ?? '';
+        _nameController.text = budget.first['nom'] as String? ?? '';
+        _descriptionController.text = budget.first['description'] as String? ?? '';
+        _justificatifController.text = budget.first['justificatif'] as String? ?? '';
+        _selectedFilePath = budget.first['justificatif'] as String? ?? '';
       });
       _showAddBudgetDialog();
     }
@@ -220,6 +208,41 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
             SnackBar(content: Text('Erreur lors de la suppression : $e')),
           );
         }
+      }
+    }
+  }
+
+  Future<void> _shareBudget(Map<String, dynamic> budget) async {
+    final budgetText = '''
+Budget MINEPAT Details:
+- Name: ${budget['nom'] ?? 'Sans nom'}
+- Amount: ${budget['amount']} FCFA
+- Category: ${budget['category'] ?? 'Non spécifiée'}
+- Description: ${budget['description'] ?? 'Aucune description'}
+- Date: ${budget['date']}
+${budget['justificatif'] != null && budget['justificatif'].toString().isNotEmpty ? '- Justificatif: ${budget['justificatif'].toString().split('/').last}' : ''}
+''';
+
+    try {
+      if (budget['justificatif'] != null &&
+          budget['justificatif'].toString().isNotEmpty &&
+          await File(budget['justificatif'].toString()).exists()) {
+        await Share.shareXFiles(
+          [XFile(budget['justificatif'].toString())],
+          text: budgetText,
+          subject: 'MINEPAT Budget: ${budget['nom'] ?? 'Sans nom'}',
+        );
+      } else {
+        await Share.share(
+          budgetText,
+          subject: 'MINEPAT Budget: ${budget['nom'] ?? 'Sans nom'}',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors du partage : $e')),
+        );
       }
     }
   }
@@ -331,22 +354,26 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Nom: ${budget['nom']}'),
+              Text('Nom: ${budget['nom'] ?? 'Sans nom'}'),
               const SizedBox(height: 8),
               Text('Montant: ${budget['amount']} FCFA'),
               const SizedBox(height: 8),
-              Text('Catégorie: ${budget['category']}'),
+              Text('Catégorie: ${budget['category'] ?? 'Non spécifiée'}'),
               const SizedBox(height: 8),
-              Text('Description: ${budget['description']}'),
+              Text('Description: ${budget['description'] ?? 'Aucune description'}'),
               const SizedBox(height: 8),
-              if (budget['justificatif'] != null && budget['justificatif'].isNotEmpty)
-                Text('Justificatif: ${budget['justificatif'].split('/').last}'),
+              if (budget['justificatif'] != null && budget['justificatif'].toString().isNotEmpty)
+                Text('Justificatif: ${budget['justificatif'].toString().split('/').last}'),
               const SizedBox(height: 8),
-              Text('Date: ${budget['date']}'),
+              Text('Date: ${budget['date'] ?? 'Non spécifiée'}'),
             ],
           ),
         ),
         actions: [
+          TextButton(
+            onPressed: () => _shareBudget(budget),
+            child: const Text('Partager'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Fermer'),
@@ -404,10 +431,10 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.3),
+                          color: Colors.white.withOpacity(0.3),
                           width: 1,
                         ),
                       ),
@@ -485,7 +512,7 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(25),
                           border: Border.all(
-                            color: const Color(0xFF6074F9).withValues(alpha: 0.2),
+                            color: const Color(0xFF6074F9).withOpacity(0.2),
                           ),
                         ),
                         child: DropdownButton<String>(
@@ -538,7 +565,7 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6074F9).withValues(alpha: 0.1),
+                          color: const Color(0xFF6074F9).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -603,12 +630,12 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFF6074F9).withValues(alpha: 0.2),
+          color: const Color(0xFF6074F9).withOpacity(0.2),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.08),
+            color: Colors.grey.withOpacity(0.08),
             spreadRadius: 1,
             blurRadius: 8,
             offset: const Offset(0, 2),
@@ -628,7 +655,7 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6074F9).withValues(alpha: 0.1),
+                    color: const Color(0xFF6074F9).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -643,7 +670,7 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        budget['nom'],
+                        budget['nom'] ?? 'Sans nom',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -659,7 +686,7 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
                         ),
                       ),
                       Text(
-                        'Date: ${budget['date']}',
+                        'Date: ${budget['date'] ?? 'Non spécifiée'}',
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.grey,
