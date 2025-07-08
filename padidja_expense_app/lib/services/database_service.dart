@@ -16,7 +16,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // Incremented version to support migration
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE utilisateurs (
@@ -24,7 +24,8 @@ class DatabaseService {
             nom TEXT,
             email TEXT UNIQUE,
             mot_de_passe TEXT,
-            role TEXT
+            role TEXT,
+            image_path TEXT
           );
         ''');
 
@@ -70,6 +71,11 @@ class DatabaseService {
             date_action TEXT
           );
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE utilisateurs ADD COLUMN image_path TEXT');
+        }
       },
     );
   }

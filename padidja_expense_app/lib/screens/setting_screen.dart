@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:padidja_expense_app/screens/user_profil_page.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
+import '../models/user_model.dart';
+import 'dart:io';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  final Utilisateur utilisateur;
+
+  const SettingsPage({super.key, required this.utilisateur});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -16,23 +21,25 @@ class _SettingsPageState extends State<SettingsPage>
   late AnimationController _slideController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  late Utilisateur _currentUser;
 
   @override
   void initState() {
     super.initState();
-    
+    _currentUser = widget.utilisateur;
+
     // Animation pour le fade-in du contenu
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-    
+
     // Animation pour le slide-up du contenu
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    
+
     _fadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
@@ -40,7 +47,7 @@ class _SettingsPageState extends State<SettingsPage>
       parent: _fadeController,
       curve: Curves.easeInOut,
     ));
-    
+
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.3),
       end: Offset.zero,
@@ -48,7 +55,7 @@ class _SettingsPageState extends State<SettingsPage>
       parent: _slideController,
       curve: Curves.easeOutCubic,
     ));
-    
+
     // Démarrer les animations
     _fadeController.forward();
     _slideController.forward();
@@ -59,6 +66,23 @@ class _SettingsPageState extends State<SettingsPage>
     _fadeController.dispose();
     _slideController.dispose();
     super.dispose();
+  }
+
+  // Method to navigate to EditProfilePage and handle the returned user
+  Future<void> _navigateToEditProfile() async {
+    final updatedUser = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditProfilePage(utilisateur: _currentUser),
+      ),
+    );
+
+    // Update the current user if the EditProfilePage returns an updated user
+    if (updatedUser != null && updatedUser is Utilisateur) {
+      setState(() {
+        _currentUser = updatedUser;
+      });
+    }
   }
 
   @override
@@ -94,7 +118,7 @@ class _SettingsPageState extends State<SettingsPage>
                               angle: value * 0.5,
                               child: Icon(
                                 Icons.settings_rounded,
-                                color: Colors.white.withOpacity(value),
+                                color: Colors.white.withValues(alpha: value),
                                 size: 28,
                               ),
                             );
@@ -160,7 +184,7 @@ class _SettingsPageState extends State<SettingsPage>
                                       _buildAnimatedSettingsItem(
                                         icon: Icons.person_outline_rounded,
                                         title: 'Edit profile',
-                                        onTap: () {},
+                                        onTap: _navigateToEditProfile,
                                         showArrow: true,
                                         delay: 200,
                                       ),
@@ -187,7 +211,7 @@ class _SettingsPageState extends State<SettingsPage>
                                             },
                                             activeColor: const Color(0xFF6074F9),
                                             activeTrackColor: const Color(0xFF6074F9)
-                                                .withOpacity(0.3),
+                                                .withValues(alpha: 0.3),
                                           ),
                                         ),
                                         delay: 400,
@@ -208,7 +232,7 @@ class _SettingsPageState extends State<SettingsPage>
                                             },
                                             activeColor: const Color(0xFF6074F9),
                                             activeTrackColor: const Color(0xFF6074F9)
-                                                .withOpacity(0.3),
+                                                .withValues(alpha: 0.3),
                                           ),
                                         ),
                                         delay: 500,
@@ -269,7 +293,7 @@ class _SettingsPageState extends State<SettingsPage>
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -292,36 +316,45 @@ class _SettingsPageState extends State<SettingsPage>
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6074F9).withOpacity(0.3),
+                    color: Color(0xFF6074F9).withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              child: const Icon(
-                Icons.person,
-                color: Colors.white,
-                size: 30,
-              ),
+              child: _currentUser.imagePath != null &&
+                      File(_currentUser.imagePath!).existsSync()
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(30),
+                      child: Image.file(
+                        File(_currentUser.imagePath!),
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.person,
+                      color: Colors.white,
+                      size: 30,
+                    ),
             ),
           ),
           const SizedBox(width: 16),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Yennefer Doe',
-                  style: TextStyle(
+                  _currentUser.nom,
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'yennefer.doe@email.com',
-                  style: TextStyle(
+                  _currentUser.email,
+                  style: const TextStyle(
                     fontSize: 14,
                     color: Colors.grey,
                   ),
@@ -409,8 +442,8 @@ class _SettingsPageState extends State<SettingsPage>
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
-          splashColor: const Color(0xFF6074F9).withOpacity(0.1),
-          highlightColor: const Color(0xFF6074F9).withOpacity(0.05),
+          splashColor: const Color(0xFF6074F9).withValues(alpha: 0.1),
+          highlightColor: const Color(0xFF6074F9).withValues(alpha: 0.05),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -419,7 +452,7 @@ class _SettingsPageState extends State<SettingsPage>
               border: Border.all(color: Colors.grey[200]!, width: 1),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
+                  color: Colors.black.withValues(alpha: 0.02),
                   blurRadius: 4,
                   offset: const Offset(0, 1),
                 ),
@@ -432,7 +465,7 @@ class _SettingsPageState extends State<SettingsPage>
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6074F9).withOpacity(0.1),
+                    color: const Color(0xFF6074F9).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: TweenAnimationBuilder<double>(

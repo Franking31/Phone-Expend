@@ -7,13 +7,13 @@ import 'package:padidja_expense_app/screens/auth_screen.dart';
 import 'package:padidja_expense_app/screens/history_screen.dart';
 import 'package:padidja_expense_app/screens/home_screen.dart';
 import 'package:padidja_expense_app/screens/home_wallet_screen.dart';
-import 'package:padidja_expense_app/screens/minepat_budget_screen.dart';
 import 'package:padidja_expense_app/screens/setting_screen.dart';
 import 'package:padidja_expense_app/screens/spend_line_screen.dart';
 import 'package:padidja_expense_app/screens/splash_screen.dart';
 import 'package:padidja_expense_app/screens/stats_screen.dart';
 import 'package:padidja_expense_app/screens/user_page_screen.dart';
 import 'package:padidja_expense_app/screens/verify_wallet_screen.dart';
+import 'package:padidja_expense_app/models/user_model.dart';
 import 'services/database_service.dart';
 
 void main() async {
@@ -27,6 +27,15 @@ class PadidjaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Placeholder user data (replace with actual user data from authentication)
+    final placeholderUser = Utilisateur(
+      id: 1,
+      nom: 'Yennefer Doe',
+      email: 'yennefer.doe@email.com',
+      motDePasse: 'password123',
+      role: 'user',
+    );
+
     return MaterialApp(
       title: 'Padidja Dépenses',
       debugShowCheckedModeBanner: false,
@@ -48,7 +57,7 @@ class PadidjaApp extends StatelessWidget {
         '/adduser': (context) => UserFormPage(),
         '/userpage': (context) => UserListPage(),
         '/spendline': (context) => const SpendLinePage(),
-        '/settings': (context) => const SettingsPage(),
+        '/settings': (context) => SettingsPage(utilisateur: placeholderUser),
         '/addwallet': (context) => const AddWalletScreen(),
         '/addTransaction': (context) => const AddTransactionScreen(),
         '/wallets': (context) => const WalletHomeScreen(),

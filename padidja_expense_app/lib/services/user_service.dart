@@ -35,4 +35,15 @@ class UserService {
     );
     return result.isNotEmpty;
   }
+
+  // Modifier un utilisateur
+  static Future<int> modifierUtilisateur(Utilisateur user) async {
+    final db = await DatabaseService.database;
+    return await db.update(
+      'utilisateurs',
+      user.toMap(),
+      where: 'id = ?',
+      whereArgs: [user.id],
+    );
+  }
 }
