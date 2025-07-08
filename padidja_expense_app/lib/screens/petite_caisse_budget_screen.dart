@@ -93,26 +93,37 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
   }
 
   Future<void> _saveBudget() async {
-    if (!_formKey.currentState!.validate()) return;
+    print("Début de _saveBudget()");
+    if (!_formKey.currentState!.validate()) {
+      print("Validation échouée");
+      return;
+    }
+    print("Validation réussie");
     final amount = double.parse(_budgetController.text);
     final category = _categoryController.text.isEmpty ? 'General' : _categoryController.text;
+    final budgetName = _nameController.text.isEmpty ? 'Sans nom' : _nameController.text;
     final budgetData = {
       'source': 'Petite caisse',
       'amount': amount,
       'category': category,
-      'nom': _nameController.text,
+      'nom': budgetName,
       'description': _descriptionController.text,
       'justificatif': _selectedFilePath ?? '',
       'date': DateTime.now().toIso8601String(),
     };
 
     try {
+      print("Ouverture de la base de données");
       final db = await WalletDatabase.instance.database;
+      int budgetId;
       if (_editingBudgetId != null) {
+        print("Mise à jour du budget avec ID: $_editingBudgetId");
         await db.update('budgets', budgetData, where: 'id = ?', whereArgs: [_editingBudgetId]);
+        budgetId = _editingBudgetId!;
         setState(() => _editingBudgetId = null);
       } else {
-        await db.insert('budgets', budgetData);
+        print("Insertion d'un nouveau budget");
+        budgetId = await db.insert('budgets', budgetData);
       }
       _budgetController.clear();
       _categoryController.clear();
@@ -121,12 +132,39 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
       _justificatifController.clear();
       _selectedFilePath = null;
       await _loadBudgets();
-      Navigator.pop(context);
-    } catch (e) {
+
+      // Ajouter une transaction pour le budget
+      final transaction = {
+        'type': 'income',
+        'source': 'Petite caisse',
+        'amount': amount,
+        'description': 'Ajout de budget Petite caisse: $budgetName',
+        'date': DateTime.now().toIso8601String(),
+      };
+      print("Tentative d'insertion de la transaction: $transaction");
+      final transactionId = await db.insert('transactions', transaction);
+      print("Transaction insérée avec ID: $transactionId");
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur lors de l\'enregistrement : $e')),
+        SnackBar(
+          content: Text('Budget "$budgetName" enregistré avec succès. Transaction ID: $transactionId'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      // Recharger les données dans home_wallet_screen.dart
+      Navigator.pop(context, true); // Retourner true pour déclencher le rechargement
+    } catch (e) {
+      print("Erreur lors de l'enregistrement ou de l'insertion de la transaction: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de l\'enregistrement : $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
+    print("Fin de _saveBudget()");
   }
 
   Future<void> _editBudget(int id) async {
@@ -192,10 +230,6 @@ class _PetiteCaisseBudgetScreenState extends State<PetiteCaisseBudgetScreen> {
                     labelText: 'Nom',
                     border: OutlineInputBorder(),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) return 'Entrez un nom';
-                    return null;
-                  },
                 ),
                 const SizedBox(height: 16),
                 TextFormField(

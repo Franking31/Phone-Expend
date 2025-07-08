@@ -1,9 +1,9 @@
 class Transaction {
   final int? id;
-  final String type; // income / outcome
-  final String source; // OM, MoMo, Carte, etc.
+  final String type;
+  final String source;
   final double amount;
-  final String description;
+  final String? description;
   final DateTime date;
 
   Transaction({
@@ -11,7 +11,7 @@ class Transaction {
     required this.type,
     required this.source,
     required this.amount,
-    required this.description,
+    this.description,
     required this.date,
   });
 
@@ -22,18 +22,18 @@ class Transaction {
       'source': source,
       'amount': amount,
       'description': description,
-      'date': date.millisecondsSinceEpoch, // Stocker comme timestamp
+      'date': date.toIso8601String(),
     };
   }
 
   factory Transaction.fromMap(Map<String, dynamic> map) {
     return Transaction(
-      id: map['id'],
-      type: map['type'],
-      source: map['source'],
-      amount: map['amount'],
-      description: map['description'],
-      date: DateTime.fromMillisecondsSinceEpoch(map['date']), // Convertir depuis timestamp
+      id: map['id'] as int?,
+      type: map['type'] as String,
+      source: map['source'] as String,
+      amount: map['amount'] as double,
+      description: map['description'] as String?,
+      date: DateTime.parse(map['date'] as String),
     );
   }
 }

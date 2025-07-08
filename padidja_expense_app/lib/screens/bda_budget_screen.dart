@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../services/wallet_database.dart';
+import '../models/transaction.dart' as trans;
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 
@@ -60,10 +61,10 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
             compare = (a['amount'] as double).compareTo(b['amount'] as double);
             break;
           case 'category':
-            compare = a['category'].compareTo(b['category']);
+            compare = (a['category'] ?? '').compareTo(b['category'] ?? '');
             break;
           case 'nom':
-            compare = a['nom'].compareTo(b['nom']);
+            compare = (a['nom'] ?? '').compareTo(b['nom'] ?? '');
             break;
           default:
             compare = a['date'].compareTo(b['date']);
@@ -94,34 +95,72 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
 
   Future<void> _saveBudget() async {
     if (!_formKey.currentState!.validate()) return;
+    
     final amount = double.parse(_budgetController.text);
     final category = _categoryController.text.isEmpty ? 'General' : _categoryController.text;
+    final name = _nameController.text;
+    final description = _descriptionController.text;
+    
     final budgetData = {
       'source': 'BDA',
       'amount': amount,
       'category': category,
-      'nom': _nameController.text,
-      'description': _descriptionController.text,
+      'nom': name,
+      'description': description,
       'justificatif': _selectedFilePath ?? '',
+      'pieceJointe': _selectedFilePath ?? '', // Ajout du champ pieceJointe
       'date': DateTime.now().toIso8601String(),
     };
 
     try {
       final db = await WalletDatabase.instance.database;
+      
       if (_editingBudgetId != null) {
         await db.update('budgets', budgetData, where: 'id = ?', whereArgs: [_editingBudgetId]);
+        
+        final transaction = trans.Transaction(
+          type: 'expense',
+          source: 'BDA',
+          amount: amount,
+          description: 'Modification de budget: $name',
+          date: DateTime.now(),
+        );
+        
+        await WalletDatabase.instance.insertTransaction(transaction);
+        
         setState(() => _editingBudgetId = null);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Budget modifié avec succès')),
+        );
       } else {
         await db.insert('budgets', budgetData);
+        
+        final transaction = trans.Transaction(
+          type: 'income',
+          source: 'BDA',
+          amount: amount,
+          description: 'Ajout de budget: $name (${category})',
+          date: DateTime.now(),
+        );
+        
+        await WalletDatabase.instance.insertTransaction(transaction);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Budget ajouté avec succès')),
+        );
       }
+      
       _budgetController.clear();
       _categoryController.clear();
       _nameController.clear();
       _descriptionController.clear();
       _justificatifController.clear();
       _selectedFilePath = null;
+      
       await _loadBudgets();
       Navigator.pop(context);
+      
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erreur lors de l\'enregistrement : $e')),
@@ -136,11 +175,11 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
       setState(() {
         _editingBudgetId = budget.first['id'] as int;
         _budgetController.text = (budget.first['amount'] as double).toString();
-        _categoryController.text = budget.first['category'] as String;
-        _nameController.text = budget.first['nom'] as String;
-        _descriptionController.text = budget.first['description'] as String;
-        _justificatifController.text = budget.first['justificatif'] as String;
-        _selectedFilePath = budget.first['justificatif'] as String;
+        _categoryController.text = budget.first['category'] as String? ?? '';
+        _nameController.text = budget.first['nom'] as String? ?? '';
+        _descriptionController.text = budget.first['description'] as String? ?? '';
+        _justificatifController.text = budget.first['justificatif'] as String? ?? '';
+        _selectedFilePath = budget.first['pieceJointe'] as String? ?? '';
       });
       _showAddEditDialog();
     }
@@ -162,11 +201,34 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
         ],
       ),
     );
+    
     if (confirmed == true) {
       try {
         final db = await WalletDatabase.instance.database;
-        await db.delete('budgets', where: 'id = ?', whereArgs: [id]);
-        await _loadBudgets();
+        
+        final budgetDetails = await db.query('budgets', where: 'id = ?', whereArgs: [id], limit: 1);
+        
+        if (budgetDetails.isNotEmpty) {
+          final budget = budgetDetails.first;
+          
+          final transaction = trans.Transaction(
+            type: 'expense',
+            source: 'BDA',
+            amount: budget['amount'] as double,
+            description: 'Suppression de budget: ${budget['nom']} (${budget['category']})',
+            date: DateTime.now(),
+          );
+          
+          await WalletDatabase.instance.insertTransaction(transaction);
+          
+          await db.delete('budgets', where: 'id = ?', whereArgs: [id]);
+          
+          await _loadBudgets();
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Budget supprimé avec succès')),
+          );
+        }
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erreur lors de la suppression : $e')),
@@ -282,13 +344,13 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Nom: ${budget['nom']}'),
+              Text('Nom: ${budget['nom'] ?? 'Non spécifié'}'),
               const SizedBox(height: 8),
               Text('Montant: ${budget['amount']} FCFA'),
               const SizedBox(height: 8),
-              Text('Catégorie: ${budget['category']}'),
+              Text('Catégorie: ${budget['category'] ?? 'Non spécifiée'}'),
               const SizedBox(height: 8),
-              Text('Description: ${budget['description']}'),
+              Text('Description: ${budget['description'] ?? 'Aucune description'}'),
               const SizedBox(height: 8),
               if (budget['justificatif'] != null && budget['justificatif'].isNotEmpty)
                 Text('Justificatif: ${budget['justificatif'].split('/').last}'),
@@ -595,7 +657,7 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        budget['nom'],
+                        budget['nom'] ?? 'Budget sans nom',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -607,6 +669,13 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
                         'Montant: ${budget['amount']} FCFA',
                         style: const TextStyle(
                           fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      Text(
+                        'Catégorie: ${budget['category'] ?? 'Non spécifiée'}',
+                        style: const TextStyle(
+                          fontSize: 12,
                           color: Colors.grey,
                         ),
                       ),

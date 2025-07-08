@@ -24,8 +24,8 @@ class Wallet {
       'name': name,
       'balance': balance,
       'expenseLimit': expenseLimit,
-      'creationDate': creationDate.toIso8601String(),
-      'lastUpdated': lastUpdated.toIso8601String(),
+      'creationDate': creationDate.millisecondsSinceEpoch, // Stocker comme timestamp
+      'lastUpdated': lastUpdated.millisecondsSinceEpoch, // Stocker comme timestamp
       'isActive': isActive ? 1 : 0, // Stocker comme entier (1 ou 0) pour SQLite
     };
   }
@@ -36,8 +36,8 @@ class Wallet {
       name: map['name'],
       balance: map['balance'],
       expenseLimit: map['expenseLimit'] ?? 0.0,
-      creationDate: DateTime.parse(map['creationDate']),
-      lastUpdated: DateTime.parse(map['lastUpdated']),
+      creationDate: DateTime.fromMillisecondsSinceEpoch(map['creationDate'] ?? DateTime.now().millisecondsSinceEpoch),
+      lastUpdated: DateTime.fromMillisecondsSinceEpoch(map['lastUpdated'] ?? DateTime.now().millisecondsSinceEpoch),
       isActive: (map['isActive'] ?? 1) == 1, // Convertir 1/0 en booléen
     );
   }

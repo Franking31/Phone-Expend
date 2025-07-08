@@ -15,279 +15,124 @@ class WalletDatabase {
     return _database!;
   }
 
-  Future<Database> _initDB(String fileName) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, fileName);
+ Future<Database> _initDB(String fileName) async {
+  final dbPath = await getDatabasesPath();
+  final path = join(dbPath, fileName);
+  // Changez la version de 3 à 4
+  return await openDatabase(path, version: 4, onCreate: _createDB, onUpgrade: _onUpgrade);
+}
 
-    return await openDatabase(
-      path, 
-      version: 6, // Incrémenté pour inclure le nouveau champ pieceJointe
-      onCreate: _createDB, 
-      onUpgrade: _onUpgrade,
-      onOpen: _onOpen,
-    );
-  }
+Future _createDB(Database db, int version) async {
+  await db.execute('''
+    CREATE TABLE wallets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      balance REAL NOT NULL,
+      expenseLimit REAL DEFAULT 0.0
+    )
+  ''');
 
-  Future _onOpen(Database db) async {
-    print("📂 Database opened, verifying tables...");
-    await _verifyTables(db);
-  }
+  await db.execute('''
+    CREATE TABLE transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      source TEXT NOT NULL,
+      amount REAL NOT NULL,
+      description TEXT,
+      date TEXT NOT NULL
+    )
+  ''');
+  
+  // Table budgets complète avec toutes les colonnes nécessaires
+  await db.execute('''
+    CREATE TABLE budgets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL,
+      category TEXT NOT NULL,
+      amount REAL NOT NULL,
+      spent REAL DEFAULT 0.0,
+      nom TEXT,
+      description TEXT,
+      justificatif TEXT,
+      pieceJointe TEXT,
+      date TEXT
+    )
+  ''');
+}
 
-  Future _verifyTables(Database db) async {
-    try {
-      final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('wallets', 'transactions', 'budgets')"
-      );
-      
-      final existingTables = tables.map((t) => t['name'] as String).toSet();
-      final requiredTables = {'wallets', 'transactions', 'budgets'};
-      
-      print("📋 Tables existantes: $existingTables");
-      print("📋 Tables requises: $requiredTables");
-      
-      for (final table in requiredTables) {
-        if (!existingTables.contains(table)) {
-          print("⚠️ Table manquante: $table - Création...");
-          await _createMissingTable(db, table);
-        }
-      }
-    } catch (e) {
-      print("❌ Erreur lors de la vérification des tables: $e");
+Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+  if (oldVersion < 2) {
+    final tableInfo = await db.rawQuery("PRAGMA table_info(wallets)");
+    final columnExists = tableInfo.any((column) => column['name'] == 'expenseLimit');
+    if (!columnExists) {
+      await db.execute('ALTER TABLE wallets ADD COLUMN expenseLimit REAL DEFAULT 0.0');
+      print("✅ Column expenseLimit added successfully");
+    } else {
+      print("⚠️ Column expenseLimit already exists, skipping migration");
     }
   }
-
-  Future _createMissingTable(Database db, String tableName) async {
-    final currentDateTime = DateTime.now().toIso8601String();
-    
-    switch (tableName) {
-      case 'wallets':
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS wallets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            balance REAL NOT NULL,
-            expenseLimit REAL DEFAULT 0.0,
-            creationDate TEXT DEFAULT '$currentDateTime',
-            lastUpdated TEXT DEFAULT '$currentDateTime',
-            isActive INTEGER NOT NULL DEFAULT 1
-          )
-        ''');
-        break;
-      case 'transactions':
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT NOT NULL,
-            source TEXT NOT NULL,
-            amount REAL NOT NULL,
-            description TEXT,
-            date TEXT NOT NULL
-          )
-        ''');
-        break;
-      case 'budgets':
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS budgets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source TEXT NOT NULL,
-            amount REAL NOT NULL,
-            category TEXT,
-            nom TEXT,
-            description TEXT,
-            justificatif TEXT,
-            pieceJointe TEXT, -- Nouveau champ pour les pièces jointes
-            date TEXT NOT NULL
-          )
-        ''');
-        break;
-    }
-    print("✅ Table $tableName créée avec succès");
-  }
-
-  Future _createDB(Database db, int version) async {
-    print("🏗️ Création de la base de données version $version");
-    
-    final currentDateTime = DateTime.now().toIso8601String();
-    
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS wallets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        balance REAL NOT NULL,
-        expenseLimit REAL DEFAULT 0.0,
-        creationDate TEXT DEFAULT '$currentDateTime',
-        lastUpdated TEXT DEFAULT '$currentDateTime',
-        isActive INTEGER NOT NULL DEFAULT 1
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS transactions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        type TEXT NOT NULL,
-        source TEXT NOT NULL,
-        amount REAL NOT NULL,
-        description TEXT,
-        date TEXT NOT NULL
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS budgets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        source TEXT NOT NULL,
-        amount REAL NOT NULL,
-        category TEXT,
-        nom TEXT,
-        description TEXT,
-        justificatif TEXT,
-        pieceJointe TEXT, -- Nouveau champ pour les pièces jointes
-        date TEXT NOT NULL
-      )
-    ''');
-    
-    print("✅ Toutes les tables créées avec succès");
-  }
-
-  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    print("🔄 Mise à jour de la base de données de v$oldVersion vers v$newVersion");
-    
-    try {
-      if (oldVersion < 2) {
-        await db.execute('ALTER TABLE wallets ADD COLUMN expenseLimit REAL DEFAULT 0.0');
-        print("✅ Colonne expenseLimit ajoutée");
-      }
-      
-      if (oldVersion < 3) {
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS budgets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source TEXT NOT NULL,
-            amount REAL NOT NULL,
-            category TEXT,
-            date TEXT NOT NULL
-          )
-        ''');
-        print("✅ Table budgets créée");
-      }
-      
-      if (oldVersion < 4) {
-        final tableInfo = await db.rawQuery("PRAGMA table_info(wallets)");
-        final columnNames = tableInfo.map((row) => row['name'] as String).toSet();
-        
-        final currentDateTime = DateTime.now().toIso8601String();
-        
-        if (!columnNames.contains('creationDate')) {
-          await db.execute('ALTER TABLE wallets ADD COLUMN creationDate TEXT');
-          await db.execute('UPDATE wallets SET creationDate = ? WHERE creationDate IS NULL', [currentDateTime]);
-          print("✅ Colonne creationDate ajoutée");
-        }
-        
-        if (!columnNames.contains('lastUpdated')) {
-          await db.execute('ALTER TABLE wallets ADD COLUMN lastUpdated TEXT');
-          await db.execute('UPDATE wallets SET lastUpdated = ? WHERE lastUpdated IS NULL', [currentDateTime]);
-          print("✅ Colonne lastUpdated ajoutée");
-        }
-        
-        if (!columnNames.contains('isActive')) {
-          await db.execute('ALTER TABLE wallets ADD COLUMN isActive INTEGER NOT NULL DEFAULT 1');
-          print("✅ Colonne isActive ajoutée");
-        }
-      }
-      
-      if (oldVersion < 5) {
-        // Ajouter les nouveaux champs à la table budgets
-        final budgetTableInfo = await db.rawQuery("PRAGMA table_info(budgets)");
-        final budgetColumnNames = budgetTableInfo.map((row) => row['name'] as String).toSet();
-        
-        if (!budgetColumnNames.contains('nom')) {
-          await db.execute('ALTER TABLE budgets ADD COLUMN nom TEXT');
-          print("✅ Colonne nom ajoutée à la table budgets");
-        }
-        
-        if (!budgetColumnNames.contains('description')) {
-          await db.execute('ALTER TABLE budgets ADD COLUMN description TEXT');
-          print("✅ Colonne description ajoutée à la table budgets");
-        }
-        
-        if (!budgetColumnNames.contains('justificatif')) {
-          await db.execute('ALTER TABLE budgets ADD COLUMN justificatif TEXT');
-          print("✅ Colonne justificatif ajoutée à la table budgets");
-        }
-      }
-      
-      if (oldVersion < 6) {
-        // Ajouter le nouveau champ pieceJointe
-        final budgetTableInfo = await db.rawQuery("PRAGMA table_info(budgets)");
-        final budgetColumnNames = budgetTableInfo.map((row) => row['name'] as String).toSet();
-        
-        if (!budgetColumnNames.contains('pieceJointe')) {
-          await db.execute('ALTER TABLE budgets ADD COLUMN pieceJointe TEXT');
-          print("✅ Colonne pieceJointe ajoutée à la table budgets");
-        }
-      }
-      
-      await _verifyTables(db);
-      
-    } catch (e) {
-      print("❌ Erreur lors de la mise à jour: $e");
-      rethrow;
-    }
-  }
-
-  Future<void> ensureBudgetsTableExists() async {
-    final db = await instance.database;
-    try {
-      await db.rawQuery("SELECT COUNT(*) FROM budgets LIMIT 1");
-      print("✅ Table budgets existe déjà");
-    } catch (e) {
-      print("⚠️ Table budgets n'existe pas, création...");
+  
+  if (oldVersion < 3) {
+    final tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='budgets'");
+    if (tables.isEmpty) {
       await db.execute('''
-        CREATE TABLE IF NOT EXISTS budgets (
+        CREATE TABLE budgets (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           source TEXT NOT NULL,
+          category TEXT NOT NULL,
           amount REAL NOT NULL,
-          category TEXT,
-          nom TEXT,
-          description TEXT,
-          justificatif TEXT,
-          pieceJointe TEXT, -- Nouveau champ pour les pièces jointes
-          date TEXT NOT NULL
+          spent REAL DEFAULT 0.0
         )
       ''');
-      print("✅ Table budgets créée avec succès");
+      print("✅ Budgets table created successfully");
+    } else {
+      print("⚠️ Budgets table already exists, skipping creation");
     }
   }
-
-  Future<List<Map<String, dynamic>>> getBudgets() async {
-    final db = await instance.database;
-    try {
-      await ensureBudgetsTableExists();
-      return await db.query('budgets');
-    } catch (e) {
-      print("❌ Erreur lors de la récupération des budgets: $e");
-      return [];
+  
+  if (oldVersion < 4) {
+    // Ajouter toutes les colonnes manquantes
+    final tableInfo = await db.rawQuery("PRAGMA table_info(budgets)");
+    final existingColumns = tableInfo.map((col) => col['name'] as String).toSet();
+    
+    final columnsToAdd = [
+      'nom TEXT',
+      'description TEXT', 
+      'justificatif TEXT',
+      'pieceJointe TEXT',
+      'date TEXT'
+    ];
+    
+    for (String columnDef in columnsToAdd) {
+      final columnName = columnDef.split(' ')[0];
+      if (!existingColumns.contains(columnName)) {
+        await db.execute('ALTER TABLE budgets ADD COLUMN $columnDef');
+        print("✅ Column $columnName added successfully to budgets table");
+      } else {
+        print("⚠️ Column $columnName already exists in budgets table, skipping migration");
+      }
     }
   }
+}
 
-  Future<int> insertBudget(Map<String, dynamic> budget) async {
-    final db = await instance.database;
-    try {
-      await ensureBudgetsTableExists();
-      return await db.insert('budgets', budget);
-    } catch (e) {
-      print("❌ Erreur lors de l'insertion du budget: $e");
-      rethrow;
-    }
+  // Ajoutez cette méthode dans wallet_database.dart dans la classe WalletDatabase
+
+Future<List<Map<String, dynamic>>> getAllBudgets() async {
+  final db = await instance.database;
+  try {
+    final budgets = await db.query('budgets', orderBy: 'id DESC');
+    print("Tous les budgets récupérés : ${budgets.length}");
+    return budgets;
+  } catch (e) {
+    print('Erreur lors de la récupération de tous les budgets: $e');
+    return [];
   }
+}
 
-  // ▶️ Insert wallet
   Future<void> insertWallet(Wallet wallet) async {
     final db = await instance.database;
     
     try {
-      if (!wallet.validate()) throw Exception("Validation du portefeuille échouée");
-      
       final existingWallets = await db.query(
         'wallets', 
         where: 'name = ?', 
@@ -299,12 +144,14 @@ class WalletDatabase {
         throw Exception("Un portefeuille avec le nom '${wallet.name}' existe déjà");
       }
       
-      wallet.updateLastUpdated();
-      final walletMap = wallet.toMap();
-      final walletId = await db.insert('wallets', walletMap);
+      final walletId = await db.insert('wallets', wallet.toMap());
       print("💼 Portefeuille inséré avec ID: $walletId");
       
-      final walletWithId = wallet.copyWith(id: walletId);
+      final walletWithId = Wallet(
+        id: walletId,
+        name: wallet.name,
+        balance: wallet.balance,
+      );
       await createWalletAdditionTransaction(walletWithId);
       
     } catch (e) {
@@ -313,30 +160,25 @@ class WalletDatabase {
     }
   }
 
-  // ▶️ Get all wallets
   Future<List<Wallet>> getWallets() async {
     final db = await instance.database;
     final res = await db.query('wallets');
     return res.map((e) => Wallet.fromMap(e)).toList();
   }
 
-  // ▶️ Update wallet
   Future<void> updateWallet(Wallet wallet) async {
     final db = await instance.database;
     
     try {
-      if (!wallet.validate()) throw Exception("Validation du portefeuille échouée");
       if (wallet.id == null) {
         print("⚠️ L'ID du portefeuille est null, impossible de mettre à jour");
         throw Exception("L'ID du portefeuille est requis pour la mise à jour");
       }
       
-      wallet.updateLastUpdated();
-      final walletMap = wallet.toMap();
       print("🔄 Mise à jour du portefeuille avec ID: ${wallet.id}");
       final rowsAffected = await db.update(
         'wallets',
-        walletMap,
+        wallet.toMap(),
         where: 'id = ?',
         whereArgs: [wallet.id],
       );
@@ -353,7 +195,6 @@ class WalletDatabase {
     }
   }
 
-  // ▶️ Add expense limit
   Future<void> addExpenseLimit(int walletId, double amountToAdd) async {
     final db = await instance.database;
     
@@ -369,12 +210,9 @@ class WalletDatabase {
 
       print("🔧 Ajout de $amountToAdd FCFA à la limite de dépense de ${wallet.name} (ID: $walletId). Nouvelle limite: $newExpenseLimit");
 
-      final updatedWallet = wallet.copyWith(expenseLimit: newExpenseLimit);
-      updatedWallet.updateLastUpdated();
-      final walletMap = updatedWallet.toMap();
       await db.update(
         'wallets',
-        walletMap,
+        {'expenseLimit': newExpenseLimit},
         where: 'id = ?',
         whereArgs: [walletId],
       );
@@ -394,6 +232,7 @@ class WalletDatabase {
       if (txMap['date'] is DateTime) {
         txMap['date'] = (txMap['date'] as DateTime).toIso8601String();
       }
+      
       final id = await db.insert('transactions', txMap,
           conflictAlgorithm: ConflictAlgorithm.replace);
       print("Transaction insérée avec ID : $id (sans mise à jour du solde)");
@@ -403,7 +242,6 @@ class WalletDatabase {
     }
   }
 
-  // ▶️ Insert transaction
   Future<void> insertTransaction(trans.Transaction tx) async {
     final db = await instance.database;
     print("Tentative d'insertion : ${tx.toMap()}");
@@ -412,9 +250,11 @@ class WalletDatabase {
       if (txMap['date'] is DateTime) {
         txMap['date'] = (txMap['date'] as DateTime).toIso8601String();
       }
+      
       final id = await db.insert('transactions', txMap,
           conflictAlgorithm: ConflictAlgorithm.replace);
       print("Transaction insérée avec ID : $id");
+      
       await _updateWalletBalance(tx);
     } catch (e) {
       print("Erreur lors de l'insertion : $e");
@@ -422,13 +262,25 @@ class WalletDatabase {
     }
   }
 
-  // 🔄 Update wallet balance after transaction
   Future<void> _updateWalletBalance(trans.Transaction tx) async {
     final db = await instance.database;
     print("Mise à jour du solde pour source : ${tx.source}");
     
     try {
-      final wallets = await db.query('wallets', where: 'name = ?', whereArgs: [tx.source]);
+      List<Map<String, dynamic>> wallets;
+      
+      if (tx.source.contains('ID:')) {
+        final idMatch = RegExp(r'ID:(\d+)').firstMatch(tx.source);
+        if (idMatch != null) {
+          final walletId = int.parse(idMatch.group(1)!);
+          wallets = await db.query('wallets', where: 'id = ?', whereArgs: [walletId]);
+        } else {
+          wallets = await db.query('wallets', where: 'name = ?', whereArgs: [tx.source]);
+        }
+      } else {
+        wallets = await db.query('wallets', where: 'name = ?', whereArgs: [tx.source]);
+      }
+      
       if (wallets.isEmpty) {
         print("Aucun portefeuille trouvé pour ${tx.source}");
         return;
@@ -441,12 +293,9 @@ class WalletDatabase {
       
       print("Ancien solde: ${wallet.balance}, Nouveau solde calculé : $newBalance");
       
-      final updatedWallet = wallet.copyWith(balance: newBalance);
-      updatedWallet.updateLastUpdated();
-      final walletMap = updatedWallet.toMap();
       await db.update(
         'wallets',
-        walletMap,
+        {'balance': newBalance},
         where: 'id = ?',
         whereArgs: [wallet.id],
       );
@@ -457,22 +306,25 @@ class WalletDatabase {
     }
   }
 
-  // 📥 Get recent transactions
   Future<List<trans.Transaction>> getLatestTransactions(int limit) async {
     final db = await instance.database;
     try {
       final result = await db.query(
-        'transactions', 
+        'transactions',
         orderBy: 'id DESC',
-        limit: limit
+        limit: limit,
       );
       print("Résultat brut de getLatestTransactions : $result");
       
       final transactions = result.map((map) {
         final txMap = Map<String, dynamic>.from(map);
-        if (txMap['date'] is String) {
-          txMap['date'] = DateTime.parse(txMap['date'] as String);
-        }
+        print("Date brute de la DB: ${txMap['date']} (type: ${txMap['date'].runtimeType})");
+        txMap['id'] = int.tryParse(txMap['id'].toString()) ?? 0;
+        txMap['amount'] = (txMap['amount'] is num) ? (txMap['amount'] as num).toDouble() : 0.0;
+        txMap['type'] = txMap['type'] as String? ?? 'unknown';
+        txMap['source'] = txMap['source'] as String? ?? 'unknown';
+        txMap['description'] = txMap['description'] as String? ?? '';
+        txMap['date'] = txMap['date'] as String? ?? DateTime.now().toIso8601String();
         return trans.Transaction.fromMap(txMap);
       }).toList();
       
@@ -484,7 +336,6 @@ class WalletDatabase {
     }
   }
 
-  // Méthode pour obtenir toutes les transactions
   Future<List<trans.Transaction>> getAllTransactions() async {
     final db = await instance.database;
     try {
@@ -493,9 +344,13 @@ class WalletDatabase {
       
       final transactions = result.map((map) {
         final txMap = Map<String, dynamic>.from(map);
-        if (txMap['date'] is String) {
-          txMap['date'] = DateTime.parse(txMap['date'] as String);
-        }
+        print("Date brute de la DB: ${txMap['date']} (type: ${txMap['date'].runtimeType})");
+        txMap['id'] = int.tryParse(txMap['id'].toString()) ?? 0;
+        txMap['amount'] = (txMap['amount'] is num) ? (txMap['amount'] as num).toDouble() : 0.0;
+        txMap['type'] = txMap['type'] as String? ?? 'unknown';
+        txMap['source'] = txMap['source'] as String? ?? 'unknown';
+        txMap['description'] = txMap['description'] as String? ?? '';
+        txMap['date'] = txMap['date'] as String? ?? DateTime.now().toIso8601String();
         return trans.Transaction.fromMap(txMap);
       }).toList();
       
@@ -503,12 +358,10 @@ class WalletDatabase {
       return transactions;
     } catch (e) {
       print("Erreur lors de la récupération de toutes les transactions : $e");
-      print("Stack trace: $e");
       return [];
     }
   }
 
-  // 🗑️ Delete wallet
   Future<void> deleteWallet(int id) async {
     final db = await instance.database;
     try {
@@ -517,7 +370,7 @@ class WalletDatabase {
         final walletData = Wallet.fromMap(wallet.first);
         print("Suppression du portefeuille : ${walletData.name} (ID: $id)");
 
-       await insertTransactionWithoutBalanceUpdate(trans.Transaction(
+        await insertTransactionWithoutBalanceUpdate(trans.Transaction(
           type: 'deletion',
           source: walletData.name,
           amount: 0.0,
@@ -536,25 +389,20 @@ class WalletDatabase {
     }
   }
 
-  // Méthode de debug améliorée
   Future<void> debugDatabase() async {
     final db = await instance.database;
     try {
-      await _verifyTables(db);
-      
       final wallets = await db.query('wallets');
       final transactions = await db.query('transactions');
-      final budgets = await getBudgets();
       
       print("=== DEBUG DATABASE DÉTAILLÉ ===");
       print("📊 Nombre de portefeuilles: ${wallets.length}");
       print("📊 Nombre de transactions: ${transactions.length}");
-      print("📊 Nombre de budgets: ${budgets.length}");
       print("");
       
       print("💼 PORTEFEUILLES:");
       for (var wallet in wallets) {
-        print("  - ID: ${wallet['id']}, Nom: ${wallet['name']}, Solde: ${wallet['balance']}, Limite: ${wallet['expenseLimit']}, Créé: ${wallet['creationDate']}, Mis à jour: ${wallet['lastUpdated']}, Actif: ${wallet['isActive']}");
+        print("  - ID: ${wallet['id']}, Nom: ${wallet['name']}, Solde: ${wallet['balance']}, Limite: ${wallet['expenseLimit']}");
       }
       print("");
       
@@ -568,17 +416,10 @@ class WalletDatabase {
         print("    Date: ${transaction['date']}");
         print("    ---");
       }
-      print("");
-      
-      print("💸 BUDGETS:");
-      for (var budget in budgets) {
-        print("  - ID: ${budget['id']}, Nom: ${budget['nom']}, Source: ${budget['source']}, Montant: ${budget['amount']}, Catégorie: ${budget['category']}, Description: ${budget['description']}, Justificatif: ${budget['justificatif']}, Pièce jointe: ${budget['pieceJointe']}, Date: ${budget['date']}");
-      }
       print("===============================");
       
       final walletTableInfo = await db.rawQuery("PRAGMA table_info(wallets)");
       final transactionTableInfo = await db.rawQuery("PRAGMA table_info(transactions)");
-      final budgetTableInfo = await db.rawQuery("PRAGMA table_info(budgets)");
       
       print("🏗️ STRUCTURE TABLE WALLETS:");
       for (var col in walletTableInfo) {
@@ -589,11 +430,6 @@ class WalletDatabase {
       for (var col in transactionTableInfo) {
         print("  - ${col['name']}: ${col['type']}");
       }
-      
-      print("🏗️ STRUCTURE TABLE BUDGETS:");
-      for (var col in budgetTableInfo) {
-        print("  - ${col['name']}: ${col['type']}");
-      }
       print("===============================");
       
     } catch (e) {
@@ -601,7 +437,6 @@ class WalletDatabase {
     }
   }
 
-  // 🧹 Clean
   Future<void> close() async {
     final db = await instance.database;
     db.close();
@@ -654,7 +489,9 @@ class WalletDatabase {
           for (int i = 1; i < entry.value.length; i++) {
             final duplicateWallet = entry.value[i];
             await db.delete('wallets', where: 'id = ?', whereArgs: [duplicateWallet['id']]);
+            
             await db.delete('transactions', where: 'description LIKE ?', whereArgs: ['%ID: ${duplicateWallet['id']}%']);
+            
             print("🗑️ Supprimé le doublon ID: ${duplicateWallet['id']}");
           }
         }
@@ -666,25 +503,43 @@ class WalletDatabase {
     }
   }
 
-  Future<void> recreateDatabase() async {
+  Future<void> insertBudget(Map<String, dynamic> budget) async {
+    final db = await instance.database;
     try {
-      final dbPath = await getDatabasesPath();
-      final path = join(dbPath, 'wallet.db');
-      
-      if (_database != null) {
-        await _database!.close();
-        _database = null;
-      }
-      
-      await deleteDatabase(path);
-      print("🗑️ Ancienne base de données supprimée");
-      
-      _database = await _initDB('wallet.db');
-      print("✅ Nouvelle base de données créée");
-      
+      await db.insert('budgets', budget);
     } catch (e) {
-      print("❌ Erreur lors de la recréation de la base de données: $e");
+      print('Erreur lors de l\'insertion du budget: $e');
       rethrow;
+    }
+  }
+
+  Future<void> updateBudget(int id, Map<String, dynamic> budget) async {
+    final db = await instance.database;
+    try {
+      await db.update('budgets', budget, where: 'id = ?', whereArgs: [id]);
+    } catch (e) {
+      print('Erreur lors de la mise à jour du budget: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteBudget(int id) async {
+    final db = await instance.database;
+    try {
+      await db.delete('budgets', where: 'id = ?', whereArgs: [id]);
+    } catch (e) {
+      print('Erreur lors de la suppression du budget: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getBudgets(String source) async {
+    final db = await instance.database;
+    try {
+      return await db.query('budgets', where: 'source = ?', whereArgs: [source]);
+    } catch (e) {
+      print('Erreur lors de la récupération des budgets: $e');
+      return [];
     }
   }
 }

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
-import 'package:intl/intl.dart'; // Déjà inclus
+import 'package:intl/intl.dart';
 import '../widgets/main_drawer_wrapper.dart';
 import '../services/wallet_database.dart';
 import '../models/transaction.dart' as trans;
-import '../services/spend_line_database.dart'; // Ajouté
-import '../models/spend_line.dart'; // Ajouté
+import '../services/spend_line_database.dart';
+import '../models/spend_line.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -25,7 +25,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _loadTransactions();
   }
 
-  // Méthode pour formater la date
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
@@ -41,7 +40,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  // Méthode pour obtenir la date relative
   String _getRelativeDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
@@ -64,35 +62,63 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  // Méthode pour charger les transactions et les dépenses
   Future<void> _loadTransactions() async {
     setState(() => _isLoading = true);
     try {
-      // Déboguer la base de données Wallet
       await WalletDatabase.instance.debugDatabase();
       
-      // Récupérer toutes les transactions de WalletDatabase
+      // Récupération des transactions de portefeuille
       final walletTransactions = await WalletDatabase.instance.getAllTransactions();
       print("Transactions chargées depuis WalletDatabase : ${walletTransactions.length}");
       
-      // Récupérer toutes les lignes de dépense de SpendLineDatabase
+      // Récupération des dépenses
       final spendLines = await SpendLineDatabase.instance.getAll();
       print("Dépenses chargées depuis SpendLineDatabase : ${spendLines.length}");
       
-      // Convertir les SpendLine en Transaction avec type 'expense'
+      // Récupération des budgets
+      final budgets = await WalletDatabase.instance.getAllBudgets();
+      print("Budgets chargés depuis WalletDatabase : ${budgets.length}");
+      
+      // Conversion des dépenses en transactions
       final expenseTransactions = spendLines.map((spendLine) {
         return trans.Transaction(
-          id: spendLine.id ?? 0, // Utiliser l'ID de SpendLine si disponible
-          type: 'expense', // Type spécifique pour les dépenses
-          source: spendLine.name, // Utiliser le nom comme source
-          amount: spendLine.budget, // Montant de la dépense
-          description: spendLine.description, // Description de la dépense
-          date: spendLine.date, // Date de la dépense
+          id: spendLine.id ?? 0,
+          type: 'expense',
+          source: spendLine.name,
+          amount: spendLine.budget,
+          description: spendLine.description,
+          date: spendLine.date,
         );
       }).toList();
 
-      // Fusionner les transactions de Wallet et les dépenses
-      final allTransactions = [...walletTransactions, ...expenseTransactions];
+      // Conversion des budgets en transactions
+      final budgetTransactions = budgets.map((budget) {
+        DateTime budgetDate;
+        if (budget['date'] != null && budget['date'].toString().isNotEmpty) {
+          try {
+            budgetDate = DateTime.parse(budget['date']);
+          } catch (e) {
+            budgetDate = DateTime.now();
+          }
+        } else {
+          budgetDate = DateTime.now();
+        }
+
+        return trans.Transaction(
+          id: budget['id'] ?? 0,
+          type: 'budget',
+          source: budget['source'] ?? 'Non spécifié',
+          amount: (budget['amount'] as num?)?.toDouble() ?? 0.0,
+          description: budget['nom'] ?? budget['description'] ?? 'Budget ${budget['category'] ?? 'Non catégorisé'}',
+          date: budgetDate,
+        );
+      }).toList();
+
+      // Fusion de toutes les transactions
+      final allTransactions = [...walletTransactions, ...expenseTransactions, ...budgetTransactions];
+      
+      // Tri par date décroissante
+      allTransactions.sort((a, b) => b.date.compareTo(a.date));
       
       setState(() {
         _allTransactions = allTransactions;
@@ -105,7 +131,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  // Méthode pour filtrer les transactions
   List<trans.Transaction> get _filteredTransactions {
     if (_searchTerm.isEmpty) {
       return _allTransactions;
@@ -126,7 +151,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         backgroundColor: Colors.white,
         body: Column(
           children: [
-            // Header avec fond bleu
             Container(
               decoration: const BoxDecoration(
                 color: Color(0xFF6074F9),
@@ -140,7 +164,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   padding: const EdgeInsets.all(20.0),
                   child: Column(
                     children: [
-                      // Barre de navigation supérieure
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -157,7 +180,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         ],
                       ),
                       const SizedBox(height: 20),
-                      // Barre de recherche
                       Container(
                         height: 45,
                         decoration: BoxDecoration(
@@ -198,14 +220,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
               ),
             ),
-            // Contenu principal
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Titre sans flèche de retour
                     Text(
                       'Toutes les transactions (${_filteredTransactions.length})',
                       style: const TextStyle(
@@ -215,7 +235,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    // Bouton de rafraîchissement
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
@@ -228,7 +247,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    // Liste des transactions
                     Expanded(
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator())
@@ -255,7 +273,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       if (_searchTerm.isEmpty) ...[
                                         const SizedBox(height: 8),
                                         Text(
-                                          'Ajoutez des portefeuilles et effectuez des transactions',
+                                          'Ajoutez des portefeuilles, budgets et effectuez des transactions',
                                           textAlign: TextAlign.center,
                                           style: TextStyle(
                                             fontSize: 14,
@@ -274,7 +292,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       final tx = _filteredTransactions[index];
                                       final isIncome = tx.type == 'income';
                                       final isDeletion = tx.type == 'deletion';
-                                      final isExpense = tx.type == 'expense'; // Nouveau type
+                                      final isExpense = tx.type == 'expense';
+                                      final isBudget = tx.type == 'budget';
                                       
                                       return Padding(
                                         padding: const EdgeInsets.only(bottom: 12.0),
@@ -298,7 +317,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                           ),
                                           child: Row(
                                             children: [
-                                              // Icône de transaction
                                               Container(
                                                 padding: const EdgeInsets.all(12),
                                                 decoration: BoxDecoration(
@@ -308,7 +326,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                           ? Colors.green.withOpacity(0.1)
                                                           : isExpense
                                                               ? Colors.red.withOpacity(0.1)
-                                                              : Colors.grey.withOpacity(0.1), // Par défaut
+                                                              : isBudget
+                                                                  ? Colors.blue.withOpacity(0.1)
+                                                                  : Colors.grey.withOpacity(0.1),
                                                   borderRadius: BorderRadius.circular(12),
                                                 ),
                                                 child: Icon(
@@ -317,20 +337,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                       : isIncome
                                                           ? Icons.arrow_downward
                                                           : isExpense
-                                                              ? Icons.arrow_upward // Icône pour dépense
-                                                              : Icons.receipt, // Icône par défaut
+                                                              ? Icons.arrow_upward
+                                                              : isBudget
+                                                                  ? Icons.account_balance_wallet
+                                                                  : Icons.receipt,
                                                   color: isDeletion
                                                       ? Colors.grey
                                                       : isIncome
                                                           ? Colors.green
                                                           : isExpense
                                                               ? Colors.red
-                                                              : Colors.grey,
+                                                              : isBudget
+                                                                  ? Colors.blue
+                                                                  : Colors.grey,
                                                   size: 24,
                                                 ),
                                               ),
                                               const SizedBox(width: 16),
-                                              // Détails de la transaction
                                               Expanded(
                                                 child: Column(
                                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,24 +393,56 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                         ),
                                                       ],
                                                     ),
-                                                    // Date complète en petit
                                                     const SizedBox(height: 2),
-                                                    Text(
-                                                      _formatDate(tx.date),
-                                                      style: TextStyle(
-                                                        fontSize: 12,
-                                                        color: Colors.grey[500],
-                                                      ),
+                                                    Row(
+                                                      children: [
+                                                        Text(
+                                                          _formatDate(tx.date),
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: Colors.grey[500],
+                                                          ),
+                                                        ),
+                                                        if (isBudget) ...[
+                                                          Text(
+                                                            ' • ',
+                                                            style: TextStyle(
+                                                              color: Colors.grey[400],
+                                                            ),
+                                                          ),
+                                                          Container(
+                                                            padding: const EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 2,
+                                                            ),
+                                                            decoration: BoxDecoration(
+                                                              color: Colors.blue.withOpacity(0.1),
+                                                              borderRadius: BorderRadius.circular(12),
+                                                            ),
+                                                            child: const Text(
+                                                              'Budget',
+                                                              style: TextStyle(
+                                                                fontSize: 10,
+                                                                color: Colors.blue,
+                                                                fontWeight: FontWeight.w500,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ],
                                                     ),
                                                   ],
                                                 ),
                                               ),
-                                              // Montant
                                               Column(
                                                 crossAxisAlignment: CrossAxisAlignment.end,
                                                 children: [
                                                   Text(
-                                                    isDeletion ? 'N/A' : '${isIncome ? '+' : '-'}${tx.amount.abs().toStringAsFixed(0)}',
+                                                    isDeletion 
+                                                        ? 'N/A' 
+                                                        : isBudget
+                                                            ? '${tx.amount.abs().toStringAsFixed(0)}'
+                                                            : '${isIncome ? '+' : '-'}${tx.amount.abs().toStringAsFixed(0)}',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       fontWeight: FontWeight.bold,
@@ -396,8 +451,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                           : isIncome
                                                               ? Colors.green
                                                               : isExpense
-                                                                  ? Colors.red // Couleur rouge pour les dépenses
-                                                                  : Colors.black,
+                                                                  ? Colors.red
+                                                                  : isBudget
+                                                                      ? Colors.blue
+                                                                      : Colors.black,
                                                     ),
                                                   ),
                                                   const Text(

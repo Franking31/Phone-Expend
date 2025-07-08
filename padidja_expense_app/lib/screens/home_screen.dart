@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../widgets/main_drawer_wrapper.dart';
-import '../services/wallet_database.dart'; 
+import '../services/wallet_database.dart';
 import '../services/spend_line_database.dart';
 import '../models/transaction.dart';
-// Removed unused import: '../models/spend_line.dart'
+import '../models/spend_line.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,67 +16,95 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _selectedType = 'all';
 
-  // Méthode pour récupérer la somme totale des portefeuilles
+  // Modified to include budget amounts in total balance
   Future<double> _getTotalBalance() async {
     final wallets = await WalletDatabase.instance.getWallets();
-    return wallets.fold<double>(0, (sum, w) => sum + w.balance);
+    final budgets = await WalletDatabase.instance.getAllBudgets();
+    final walletBalance = wallets.fold<double>(0, (sum, w) => sum + w.balance);
+    final budgetAmount = budgets.fold<double>(0, (sum, b) => sum + (b['amount'] as num).toDouble());
+    return walletBalance + budgetAmount;
   }
 
-  // Méthode pour récupérer les transactions filtrées
+  // Modified to fetch budget additions or expenses based on type
   Future<List<Transaction>> _getFilteredTransactions() async {
-    final transactions = await WalletDatabase.instance.getLatestTransactions(10);
-    
-    if (_selectedType == 'outcome') {
-      // Inclure les dépenses des transactions ET des spend_lines
+    if (_selectedType == 'income') {
+      final budgets = await WalletDatabase.instance.getAllBudgets();
+      return budgets.take(2).map((budget) {
+        DateTime budgetDate;
+        try {
+          budgetDate = DateTime.parse(budget['date'] ?? DateTime.now().toIso8601String());
+        } catch (e) {
+          budgetDate = DateTime.now();
+        }
+        return Transaction(
+          id: budget['id'] ?? 0,
+          type: 'income',
+          source: budget['source'] ?? 'Non spécifié',
+          amount: (budget['amount'] as num?)?.toDouble() ?? 0.0,
+          description: budget['nom'] ?? 'Budget ${budget['category'] ?? 'Non catégorisé'}',
+          date: budgetDate,
+        );
+      }).toList();
+    } else if (_selectedType == 'outcome') {
       final spendLines = await SpendLineDatabase.instance.getAll();
-      final outcomeTransactions = transactions.where((tx) => tx.type.toLowerCase() == 'outcome').toList();
+      return spendLines.take(2).map((spend) => Transaction(
+        id: spend.id,
+        amount: spend.budget,
+        description: spend.description,
+        date: spend.date,
+        type: 'outcome',
+        source: spend.name,
+      )).toList();
+    } else {
+      final budgets = await WalletDatabase.instance.getAllBudgets();
+      final spendLines = await SpendLineDatabase.instance.getAll();
       
-      // Convertir les SpendLine en Transaction pour l'affichage
-      final spendLineTransactions = spendLines.take(10 - outcomeTransactions.length).map((spend) =>
-        Transaction(
-          id: spend.id,
-          amount: spend.budget,
-          description: spend.description,
-          date: spend.date,
-          type: 'outcome',
-          source: 'spend_line', // Added missing required parameter
-        )
-      ).toList();
-      
-      return [...outcomeTransactions, ...spendLineTransactions];
+      final budgetTransactions = budgets.take(2).map((budget) {
+        DateTime budgetDate;
+        try {
+          budgetDate = DateTime.parse(budget['date'] ?? DateTime.now().toIso8601String());
+        } catch (e) {
+          budgetDate = DateTime.now();
+        }
+        return Transaction(
+          id: budget['id'] ?? 0,
+          type: 'income',
+          source: budget['source'] ?? 'Non spécifié',
+          amount: (budget['amount'] as num?)?.toDouble() ?? 0.0,
+          description: budget['nom'] ?? 'Budget ${budget['category'] ?? 'Non catégorisé'}',
+          date: budgetDate,
+        );
+      }).toList();
+
+      final spendTransactions = spendLines.take(2).map((spend) => Transaction(
+        id: spend.id,
+        amount: spend.budget,
+        description: spend.description,
+        date: spend.date,
+        type: 'outcome',
+        source: spend.name,
+      )).toList();
+
+      return [...budgetTransactions, ...spendTransactions]
+        ..sort((a, b) => b.date.compareTo(a.date));
     }
-    
-    if (_selectedType == 'all') return transactions;
-    return transactions.where((tx) => tx.type.toLowerCase() == _selectedType.toLowerCase()).toList();
   }
 
-  // Méthode pour calculer les totaux incluant les spend_lines
+  // Modified to calculate budget and expense totals
   Future<Map<String, double>> _calculateTotals() async {
-    final transactions = await WalletDatabase.instance.getLatestTransactions(1000);
+    final budgets = await WalletDatabase.instance.getAllBudgets();
     final spendLines = await SpendLineDatabase.instance.getAll();
     
-    double totalIncome = 0.0;
-    double totalOutcome = 0.0;
+    final totalBudget = budgets.fold<double>(0, (sum, b) => sum + (b['amount'] as num).toDouble());
+    final totalSpent = budgets.fold<double>(0, (sum, b) => sum + (b['spent'] as num? ?? 0.0).toDouble());
+    final totalExpenses = spendLines.fold<double>(0, (sum, s) => sum + s.budget);
     
-    // Calculer les revenus et dépenses des transactions
-    for (var tx in transactions) {
-      if (tx.type == 'income') {
-        totalIncome += tx.amount;
-      } else if (tx.type == 'outcome') {
-        totalOutcome += tx.amount;
-      }
-    }
-    
-    // Ajouter les dépenses des spend_lines
-    for (var spend in spendLines) {
-      totalOutcome += spend.budget;
-    }
-    
-    final remaining = totalIncome - totalOutcome;
-    final variation = totalIncome > 0 ? ((remaining / totalIncome) * 100) : 0.0;
+    final totalOutcome = totalSpent + totalExpenses;
+    final remaining = totalBudget - totalOutcome;
+    final variation = totalBudget > 0 ? ((remaining / totalBudget) * 100) : 0.0;
     
     return {
-      'income': totalIncome,
+      'budget': totalBudget,
       'outcome': totalOutcome,
       'variation': variation,
       'remaining': remaining
@@ -87,22 +115,6 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _selectedType = type.toLowerCase();
     });
-  }
-
-  // Méthode pour supprimer un portefeuille et rafraîchir l'état
-  Future<void> _deleteWallet(int walletId) async {
-    try {
-      await WalletDatabase.instance.deleteWallet(walletId);
-      if (mounted) { // Added mounted check
-        setState(() {});
-      }
-    } catch (e) {
-      if (mounted) { // Added mounted check
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Erreur lors de la suppression : $e")),
-        );
-      }
-    }
   }
 
   @override
@@ -146,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Column(
                             children: [
                               Text(
-                                '\$${total.toStringAsFixed(2)}',
+                                '${total.toStringAsFixed(2)} FCFA',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 36,
@@ -156,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               const SizedBox(height: 8),
                               const Text(
-                                "Total Balance",
+                                "Solde total",
                                 style: TextStyle(
                                   color: Colors.white70,
                                   fontSize: 16,
@@ -169,9 +181,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _typeButton("Income", _selectedType == 'income'),
+                              _typeButton("Budget", _selectedType == 'income'),
                               const SizedBox(width: 15),
-                              _typeButton("Outcome", _selectedType == 'outcome'),
+                              _typeButton("Dépenses", _selectedType == 'outcome'),
                             ],
                           ),
                         ],
@@ -185,15 +197,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _savingsCard(),
-                            const SizedBox(height: 15),
-                            _savingsCard(),
                             const Padding(
                               padding: EdgeInsets.fromLTRB(0, 30, 0, 20),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    "Latest Transaction",
+                                    "Derniers mouvements",
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 18,
@@ -203,13 +213,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                   Row(
                                     children: [
                                       Text(
-                                        "See all",
+                                        "Voir tout",
                                         style: TextStyle(
                                           color: Colors.grey,
                                           fontSize: 14,
                                         ),
                                       ),
-                                      SizedBox(width: 5), // Removed unnecessary const
+                                      SizedBox(width: 5),
                                       Icon(
                                         Icons.arrow_forward_ios,
                                         color: Colors.grey,
@@ -220,9 +230,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ],
                               ),
                             ),
-                            _transactionCard(transactions),
-                            const SizedBox(height: 10),
-                            _transactionCard(transactions),
+                            ...transactions.map((tx) => _transactionCard([tx])).toList(),
                             const SizedBox(height: 20),
                           ],
                         ),
@@ -240,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _typeButton(String label, bool selected) {
     return GestureDetector(
-      onTap: () => _setTransactionType(label),
+      onTap: () => _setTransactionType(label == 'Budget' ? 'income' : 'outcome'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         decoration: BoxDecoration(
@@ -250,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withOpacity(0.1),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -277,7 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final totals = snapshot.data!;
         final remaining = totals['remaining']!;
         final variation = totals['variation']!;
-        final totalIncome = totals['income']!;
+        final totalBudget = totals['budget']!;
         final totalOutcome = totals['outcome']!;
         final isGain = remaining >= 0;
 
@@ -288,10 +296,10 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFFF8F4FF),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF6074F9).withValues(alpha: 0.3), width: 1),
+              border: Border.all(color: const Color(0xFF6074F9).withOpacity(0.3), width: 1),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withValues(alpha: 0.1),
+                  color: Colors.grey.withOpacity(0.1),
                   blurRadius: 10,
                   offset: const Offset(0, 3),
                 ),
@@ -302,7 +310,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  "Savings Account",
+                  "Compte d'épargne",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
@@ -316,9 +324,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text("Revenus", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                        const Text("Budget alloué", style: TextStyle(color: Colors.grey, fontSize: 14)),
                         const SizedBox(height: 5),
-                        Text("\$${totalIncome.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text("${totalBudget.toStringAsFixed(0)} FCFA", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        const SizedBox(height: 5),
+                        Text(
+                          totalBudget > 0 ? "${((totalBudget / (totalBudget + totalOutcome)) * 100).toStringAsFixed(1)}%" : "0.0%",
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
                       ],
                     ),
                     Column(
@@ -326,7 +339,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         const Text("Dépenses", style: TextStyle(color: Colors.grey, fontSize: 14)),
                         const SizedBox(height: 5),
-                        Text("\$${totalOutcome.toStringAsFixed(2)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text("${totalOutcome.toStringAsFixed(0)} FCFA", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        const SizedBox(height: 5),
+                        Text(
+                          totalBudget > 0 ? "${((totalOutcome / (totalBudget + totalOutcome)) * 100).toStringAsFixed(1)}%" : "0.0%",
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
                       ],
                     ),
                   ],
@@ -341,7 +359,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Text("Solde", style: TextStyle(color: Colors.grey, fontSize: 14)),
                         const SizedBox(height: 5),
                         Text(
-                          "\$${remaining.toStringAsFixed(2)}",
+                          "${remaining.toStringAsFixed(0)} FCFA",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -371,7 +389,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: isGain ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                    color: isGain ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -406,16 +424,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _transactionCard(List<Transaction> transactions) {
     final transaction = transactions.isNotEmpty ? transactions.first : null;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 0),
+      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
           color: const Color(0xFFF8F4FF),
-          border: Border.all(color: const Color(0xFF6074F9).withValues(alpha: 0.3), width: 1),
+          border: Border.all(color: const Color(0xFF6074F9).withOpacity(0.3), width: 1),
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withValues(alpha: 0.08),
+              color: Colors.grey.withOpacity(0.08),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -430,13 +448,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    transaction?.description ?? "Aucune transaction",
+                    transaction?.description ?? "Aucun mouvement",
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    transaction?.date.toString().split(' ')[0] ?? "N/A",
+                    transaction != null
+                        ? '${transaction.date.day}/${transaction.date.month}/${transaction.date.year}'
+                        : "N/A",
                     style: const TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                 ],
@@ -447,7 +467,9 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  transaction != null ? "${transaction.amount >= 0 ? '+' : '-'}\$${transaction.amount.abs().toStringAsFixed(2)}" : "\$0.00",
+                  transaction != null
+                      ? "${transaction.type == 'income' ? '+' : '-'}${transaction.amount.abs().toStringAsFixed(0)} FCFA"
+                      : "0 FCFA",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -458,13 +480,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: transaction != null && transaction.type == 'outcome' 
-                        ? Colors.red.withValues(alpha: 0.1) 
-                        : Colors.green.withValues(alpha: 0.1),
+                    color: transaction != null && transaction.type == 'outcome'
+                        ? Colors.red.withOpacity(0.1)
+                        : Colors.green.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    transaction?.type.toUpperCase() ?? "N/A",
+                    transaction != null
+                        ? (transaction.type == 'income' ? 'BUDGET' : 'DÉPENSE')
+                        : "N/A",
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w500,

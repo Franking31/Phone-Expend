@@ -23,6 +23,7 @@ class _StatsScreenState extends State<StatsScreen> {
   int selectedWeek = 1;
   List<trans.Transaction> transactions = [];
   List<SpendLine> spendLines = [];
+  List<Map<String, dynamic>> budgets = [];
   bool isLoading = true;
 
   @override
@@ -33,52 +34,23 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Future<void> _loadAllData() async {
     try {
-      // Charger les transactions (revenus)
+      // Charger les transactions (uniquement pour cohérence, à retirer si non utilisé)
       final tx = await WalletDatabase.instance.getLatestTransactions(1000);
       // Charger les lignes de dépenses
       final spends = await SpendLineDatabase.instance.getAll();
+      // Charger tous les budgets
+      final budgetsList = await WalletDatabase.instance.getAllBudgets();
       
       setState(() {
         transactions = tx;
         spendLines = spends;
+        budgets = budgetsList;
         isLoading = false;
       });
     } catch (e) {
       setState(() {
         isLoading = false;
       });
-    }
-  }
-
-  List<trans.Transaction> _getFilteredTransactions() {
-    switch (selectedPeriod) {
-      case 'Daily':
-        final now = DateTime.now();
-        return transactions.where((tx) =>
-            tx.date.year == now.year &&
-            tx.date.month == now.month &&
-            tx.date.day == now.day).toList();
-      case 'Weekly':
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        final weekStart = today.subtract(Duration(days: today.weekday - 1 + (7 * selectedWeekOffset)));
-        final weekEnd = weekStart.add(const Duration(days: 6));
-        return transactions.where((tx) =>
-            tx.date.isAfter(weekStart.subtract(const Duration(days: 1))) &&
-            tx.date.isBefore(weekEnd.add(const Duration(days: 1)))).toList();
-      case 'Monthly':
-        final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
-        final startDay = (selectedWeek - 1) * 7 + 1;
-        final endDay = startDay + 6 > daysInMonth ? daysInMonth : startDay + 6;
-        return transactions.where((tx) =>
-            tx.date.year == selectedYear &&
-            tx.date.month == selectedMonth &&
-            tx.date.day >= startDay &&
-            tx.date.day <= endDay).toList();
-      case 'Yearly':
-        return transactions.where((tx) => tx.date.year == selectedYear).toList();
-      default:
-        return [];
     }
   }
 
@@ -114,18 +86,60 @@ class _StatsScreenState extends State<StatsScreen> {
     }
   }
 
-  Map<String, double> _calculateTotals() {
-    final filteredTx = _getFilteredTransactions();
-    final filteredSpends = _getFilteredSpendLines();
-    final Map<String, double> totals = {'budget': 0.0, 'cost': 0.0};
+  List<Map<String, dynamic>> _getFilteredBudgets() {
+    switch (selectedPeriod) {
+      case 'Daily':
+        final now = DateTime.now();
+        return budgets.where((budget) {
+          if (budget['date'] == null) return false;
+          final budgetDate = DateTime.parse(budget['date']);
+          return budgetDate.year == now.year &&
+              budgetDate.month == now.month &&
+              budgetDate.day == now.day;
+        }).toList();
+      case 'Weekly':
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final weekStart = today.subtract(Duration(days: today.weekday - 1 + (7 * selectedWeekOffset)));
+        final weekEnd = weekStart.add(const Duration(days: 6));
+        return budgets.where((budget) {
+          if (budget['date'] == null) return false;
+          final budgetDate = DateTime.parse(budget['date']);
+          return budgetDate.isAfter(weekStart.subtract(const Duration(days: 1))) &&
+              budgetDate.isBefore(weekEnd.add(const Duration(days: 1)));
+        }).toList();
+      case 'Monthly':
+        final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
+        final startDay = (selectedWeek - 1) * 7 + 1;
+        final endDay = startDay + 6 > daysInMonth ? daysInMonth : startDay + 6;
+        return budgets.where((budget) {
+          if (budget['date'] == null) return false;
+          final budgetDate = DateTime.parse(budget['date']);
+          return budgetDate.year == selectedYear &&
+              budgetDate.month == selectedMonth &&
+              budgetDate.day >= startDay &&
+              budgetDate.day <= endDay;
+        }).toList();
+      case 'Yearly':
+        return budgets.where((budget) {
+          if (budget['date'] == null) return false;
+          final budgetDate = DateTime.parse(budget['date']);
+          return budgetDate.year == selectedYear;
+        }).toList();
+      default:
+        return [];
+    }
+  }
 
-    // Calculer le budget à partir des transactions (revenus)
-    for (var tx in filteredTx) {
-      if (tx.type == 'income') {
-        totals['budget'] = totals['budget']! + tx.amount;
-      } else if (tx.type == 'outcome') {
-        totals['cost'] = totals['cost']! + tx.amount;
-      }
+  Map<String, double> _calculateTotals() {
+    final filteredSpends = _getFilteredSpendLines();
+    final filteredBudgets = _getFilteredBudgets();
+    final Map<String, double> totals = {'budgetAllocated': 0.0, 'cost': 0.0, 'budgetSpent': 0.0};
+
+    // Ajouter les budgets alloués et dépensés
+    for (var budget in filteredBudgets) {
+      totals['budgetAllocated'] = totals['budgetAllocated']! + (budget['amount'] ?? 0.0);
+      totals['budgetSpent'] = totals['budgetSpent']! + (budget['spent'] ?? 0.0);
     }
 
     // Ajouter les coûts des lignes de dépenses
@@ -133,47 +147,50 @@ class _StatsScreenState extends State<StatsScreen> {
       totals['cost'] = totals['cost']! + spend.budget;
     }
 
-    totals['save'] = totals['budget']! - totals['cost']!;
+    // Calculer l'économie : budget alloué - (dépenses + budget dépensé)
+    totals['save'] = totals['budgetAllocated']! - (totals['cost']! + totals['budgetSpent']!);
     return totals;
   }
 
   List<BarChartGroupData> _buildBarChartData() {
     final labels = _getPeriodLabels();
     final List<BarChartGroupData> barGroups = [];
-    final filteredTx = _getFilteredTransactions();
     final filteredSpends = _getFilteredSpendLines();
+    final filteredBudgets = _getFilteredBudgets();
 
     for (int i = 0; i < labels.length; i++) {
-      double budget = 0.0;
+      double budgetAllocated = 0.0;
       double cost = 0.0;
+      double budgetSpent = 0.0;
       
-      // Calculer le budget et les coûts des transactions
-      for (var tx in filteredTx) {
-        final txDate = tx.date;
+      // Ajouter les données des budgets
+      for (var budgetData in filteredBudgets) {
+        if (budgetData['date'] == null) continue;
+        final budgetDate = DateTime.parse(budgetData['date']);
         bool include = false;
         
         switch (selectedPeriod) {
           case 'Daily':
-            include = txDate.hour == i;
+            include = budgetDate.hour == i;
             break;
           case 'Weekly':
             final dayIndex = i + 1;
             final weekStart = DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1 + (7 * selectedWeekOffset)));
-            include = txDate.weekday == dayIndex && 
-                      txDate.isAfter(weekStart.subtract(const Duration(days: 1))) &&
-                      txDate.isBefore(weekStart.add(const Duration(days: 7)));
+            include = budgetDate.weekday == dayIndex && 
+                      budgetDate.isAfter(weekStart.subtract(const Duration(days: 1))) &&
+                      budgetDate.isBefore(weekStart.add(const Duration(days: 7)));
             break;
           case 'Monthly':
-            include = txDate.day == (i + 1) + ((selectedWeek - 1) * 7);
+            include = budgetDate.day == (i + 1) + ((selectedWeek - 1) * 7);
             break;
           case 'Yearly':
-            include = txDate.month == i + 1;
+            include = budgetDate.month == i + 1;
             break;
         }
         
         if (include) {
-          if (tx.type == 'income') budget += tx.amount;
-          if (tx.type == 'outcome') cost += tx.amount;
+          budgetAllocated += budgetData['amount'] ?? 0.0;
+          budgetSpent += budgetData['spent'] ?? 0.0; // Correction ici avec ?? 0.0
         }
       }
       
@@ -210,13 +227,13 @@ class _StatsScreenState extends State<StatsScreen> {
         x: i,
         barRods: [
           BarChartRodData(
-            toY: budget, 
-            color: Colors.blue, 
+            toY: budgetAllocated, 
+            color: Colors.orange, 
             width: _getBarWidth(),
             borderRadius: BorderRadius.circular(4),
           ),
           BarChartRodData(
-            toY: cost, 
+            toY: cost + budgetSpent, 
             color: Colors.red.shade300, 
             width: _getBarWidth(),
             borderRadius: BorderRadius.circular(4),
@@ -231,15 +248,15 @@ class _StatsScreenState extends State<StatsScreen> {
   double _getBarWidth() {
     switch (selectedPeriod) {
       case 'Daily':
-        return 8; // Réduit de 15 à 8
+        return 6;
       case 'Weekly':
-        return 12; // Réduit de 25 à 12
+        return 10;
       case 'Monthly':
-        return 6; // Réduit de 12 à 6
+        return 4;
       case 'Yearly':
-        return 10; // Réduit de 20 à 10
+        return 8;
       default:
-        return 8; // Réduit de 20 à 8
+        return 6;
     }
   }
 
@@ -265,73 +282,73 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   List<PieChartSectionData> _buildPieChartData() {
-    final totals = _calculateTotals();
-    final totalAmount = totals['budget']! + totals['cost']!;
-    
-    if (totalAmount == 0) {
-      return [
-        PieChartSectionData(
-          color: Colors.grey.shade300,
-          value: 1,
-          title: 'Aucune donnée',
-          radius: 80,
-          titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        ),
-      ];
-    }
+  final totals = _calculateTotals();
+  final totalAmount = totals['budgetAllocated']! + totals['cost']!;
 
-    List<PieChartSectionData> sections = [];
-    
-    if (totals['budget']! > 0) {
-      sections.add(PieChartSectionData(
-        color: Colors.blue,
-        value: totals['budget'],
-        title: 'Budget\n${totals['budget']!.toStringAsFixed(0)} FCFA',
+  if (totalAmount == 0) {
+    return [
+      PieChartSectionData(
+        color: Colors.grey.shade300,
+        value: 1,
+        title: 'Aucune donnée',
         radius: 80,
-        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-      ));
-    }
-    
-    if (totals['cost']! > 0) {
-      sections.add(PieChartSectionData(
-        color: Colors.red.shade300,
-        value: totals['cost'],
-        title: 'Dépenses\n${totals['cost']!.toStringAsFixed(0)} FCFA',
-        radius: 80,
-        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-      ));
-    }
-    
-    if (totals['save']! > 0) {
-      sections.add(PieChartSectionData(
-        color: Colors.green,
-        value: totals['save'],
-        title: 'Économie\n${totals['save']!.toStringAsFixed(0)} FCFA',
-        radius: 80,
-        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-      ));
-    }
-
-    return sections;
+        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+      ),
+    ];
   }
 
-  double _getMaxYValue() {
-    final totals = _calculateTotals();
-    final maxValue = [totals['budget']!, totals['cost']!].reduce((a, b) => a > b ? a : b);
-    return maxValue > 0 ? maxValue * 1.2 : 100;
+  List<PieChartSectionData> sections = [];
+  
+  if (totals['budgetAllocated']! > 0) {
+    sections.add(PieChartSectionData(
+      color: Colors.orange,
+      value: totals['budgetAllocated'],
+      title: 'Budget alloué\n${totals['budgetAllocated']!.toStringAsFixed(0)} FCFA',
+      radius: 80,
+      titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+    ));
+  }
+  
+  if (totals['cost']! > 0) {
+    sections.add(PieChartSectionData(
+      color: Colors.red.shade300,
+      value: totals['cost']! + totals['budgetSpent']!, // Fixed: Added null check for cost
+      title: 'Dépenses\n${(totals['cost']! + totals['budgetSpent']!).toStringAsFixed(0)} FCFA',
+      radius: 80,
+      titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+    ));
+  }
+  
+  if (totals['save']! > 0) {
+    sections.add(PieChartSectionData(
+      color: Colors.green,
+      value: totals['save'],
+      title: 'Économie\n${totals['save']!.toStringAsFixed(0)} FCFA',
+      radius: 80,
+      titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+    ));
   }
 
-  void _changeWeek(int delta) {
-    setState(() {
-      if (selectedPeriod == 'Weekly') {
-        selectedWeekOffset += delta;
-      } else if (selectedPeriod == 'Monthly') {
-        final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
-        final maxWeeks = (daysInMonth / 7).ceil();
-        selectedWeek = (selectedWeek + delta).clamp(1, maxWeeks);
-      }
-    });
-  }
+  return sections;
+}
+
+double _getMaxYValue() {
+  final totals = _calculateTotals();
+  final maxValue = [totals['budgetAllocated']!, totals['cost']! + totals['budgetSpent']!].reduce((a, b) => a > b ? a : b);
+  return maxValue > 0 ? maxValue * 1.2 : 100;
+}
+
+void _changeWeek(int delta) {
+  setState(() {
+    if (selectedPeriod == 'Weekly') {
+      selectedWeekOffset += delta;
+    } else if (selectedPeriod == 'Monthly') {
+      final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
+      final maxWeeks = (daysInMonth / 7).ceil();
+      selectedWeek = (selectedWeek + delta).clamp(1, maxWeeks);
+    }
+  });
+}
 
   @override
   Widget build(BuildContext context) {
@@ -499,8 +516,8 @@ class _StatsScreenState extends State<StatsScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  _buildLegendItem(Colors.blue, "Budget"),
-                                  const SizedBox(width: 20),
+                                  _buildLegendItem(Colors.orange, "Budget alloué"),
+                                  const SizedBox(width: 15),
                                   _buildLegendItem(Colors.red.shade300, "Dépenses"),
                                 ],
                               ),
@@ -533,8 +550,9 @@ class _StatsScreenState extends State<StatsScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 16),
-                                  _detailItem("Budget", "${totals['budget']!.toStringAsFixed(0)} FCFA", Icons.trending_up),
+                                  _detailItem("Budget alloué", "${totals['budgetAllocated']!.toStringAsFixed(0)} FCFA", Icons.account_balance_wallet),
                                   _detailItem("Dépenses", "${totals['cost']!.toStringAsFixed(0)} FCFA", Icons.trending_down),
+                                  _detailItem("Budget dépensé", "${totals['budgetSpent']!.toStringAsFixed(0)} FCFA", Icons.money_off),
                                   const Divider(color: Colors.white54, height: 20),
                                   _detailItem("Économie", "${totals['save']!.toStringAsFixed(0)} FCFA", Icons.savings, isTotal: true),
                                 ],
@@ -546,14 +564,14 @@ class _StatsScreenState extends State<StatsScreen> {
                             Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: totals['save']! > 0 ? Colors.green.shade100 : Colors.orange.shade100,
+                                color: totals['save']! >= 0 ? Colors.green.shade100 : Colors.orange.shade100,
                                 borderRadius: BorderRadius.circular(15),
                               ),
                               child: Row(
                                 children: [
                                   Icon(
-                                    totals['save']! > 0 ? Icons.check_circle : Icons.info,
-                                    color: totals['save']! > 0 ? Colors.green : Colors.orange,
+                                    totals['save']! >= 0 ? Icons.check_circle : Icons.info,
+                                    color: totals['save']! >= 0 ? Colors.green : Colors.orange,
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -565,11 +583,11 @@ class _StatsScreenState extends State<StatsScreen> {
                                           style: TextStyle(fontWeight: FontWeight.bold),
                                         ),
                                         Text(
-                                          totals['save']! > 0 
+                                          totals['save']! >= 0 
                                             ? "Objectif atteint avec succès !" 
-                                            : "Attention aux dépenses !",
+                                            : "Attention, dépassement de budget !",
                                           style: TextStyle(
-                                            color: totals['save']! > 0 ? Colors.green.shade700 : Colors.orange.shade700,
+                                            color: totals['save']! >= 0 ? Colors.green.shade700 : Colors.orange.shade700,
                                           ),
                                         ),
                                       ],
@@ -578,6 +596,26 @@ class _StatsScreenState extends State<StatsScreen> {
                                 ],
                               ),
                             ),
+
+                            // Nouvelle section pour afficher les budgets par catégorie
+                            if (_getFilteredBudgets().isNotEmpty) ...[
+                              const SizedBox(height: 24),
+                              const Text(
+                                "Budgets par catégorie",
+                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 16),
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Column(
+                                  children: _buildBudgetCategoryList(),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -590,20 +628,212 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  List<Widget> _buildBudgetCategoryList() {
+    final filteredBudgets = _getFilteredBudgets();
+    final Map<String, Map<String, double>> categoryTotals = {};
+    
+    // Grouper les budgets par catégorie
+    for (var budget in filteredBudgets) {
+      final category = budget['category'] ?? 'Non catégorisé';
+      if (!categoryTotals.containsKey(category)) {
+        categoryTotals[category] = {'allocated': 0.0, 'spent': 0.0};
+      }
+      categoryTotals[category]!['allocated'] = 
+          (categoryTotals[category]!['allocated'] ?? 0.0) + (budget['amount'] ?? 0.0);
+      categoryTotals[category]!['spent'] = 
+          (categoryTotals[category]!['spent'] ?? 0.0) + (budget['spent'] ?? 0.0);
+    }
+    
+    if (categoryTotals.isEmpty) {
+      return [
+        const Center(
+          child: Text(
+            'Aucun budget pour cette période',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      ];
+    }
+    
+    List<Widget> categoryWidgets = [];
+    
+    categoryTotals.forEach((category, totals) {
+      final allocated = totals['allocated']!;
+      final spent = totals['spent']!;
+      final remaining = allocated - spent;
+      final percentage = allocated > 0 ? (spent / allocated) * 100 : 0.0;
+      
+      categoryWidgets.add(
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                blurRadius: 5,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    category,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: percentage > 90 
+                          ? Colors.red.shade100 
+                          : percentage > 70 
+                              ? Colors.orange.shade100 
+                              : Colors.green.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${percentage.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        color: percentage > 90 
+                            ? Colors.red.shade700 
+                            : percentage > 70 
+                                ? Colors.orange.shade700 
+                                : Colors.green.shade700,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              
+              // Barre de progression
+              Container(
+                height: 8,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Stack(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    FractionallySizedBox(
+                      widthFactor: allocated > 0 ? (spent / allocated).clamp(0.0, 1.0) : 0.0,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: percentage > 90 
+                              ? Colors.red 
+                              : percentage > 70 
+                                  ? Colors.orange 
+                                  : Colors.green,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              
+              // Détails des montants
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Alloué: ${allocated.toStringAsFixed(0)} FCFA',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.blue,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        'Dépensé: ${spent.toStringAsFixed(0)} FCFA',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Restant: ${remaining.toStringAsFixed(0)} FCFA',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: remaining >= 0 ? Colors.green : Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (remaining < 0)
+                        Text(
+                          'Dépassement!',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.red.shade700,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+    
+    return categoryWidgets;
+  }
+
   Widget _buildPeriodButton(String period, String label) {
     final isSelected = selectedPeriod == period;
     return GestureDetector(
-      onTap: () => setState(() => selectedPeriod = period),
+      onTap: () {
+        setState(() {
+          selectedPeriod = period;
+          selectedWeekOffset = 0;
+          selectedWeek = 1;
+        });
+      },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF6074F9) : Colors.transparent,
+          color: isSelected ? const Color(0xFF6074F9) : Colors.grey.shade200,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey,
+            color: isSelected ? Colors.white : Colors.grey.shade600,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -611,9 +841,68 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
+  Widget _buildBarChart() {
+    final barGroups = _buildBarChartData();
+    final labels = _getPeriodLabels();
+    
+    return BarChart(
+      BarChartData(
+        maxY: _getMaxYValue(),
+        barGroups: barGroups,
+        titlesData: FlTitlesData(
+          show: true,
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                if (value.toInt() >= 0 && value.toInt() < labels.length) {
+                  return Text(
+                    labels[value.toInt()],
+                    style: const TextStyle(fontSize: 10),
+                  );
+                }
+                return const Text('');
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                return Text(
+                  value.toInt().toString(),
+                  style: const TextStyle(fontSize: 10),
+                );
+              },
+            ),
+          ),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: false),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: _getMaxYValue() / 5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPieChart() {
+    final sections = _buildPieChartData();
+    
+    return PieChart(
+      PieChartData(
+        sections: sections,
+        centerSpaceRadius: 60,
+        sectionsSpace: 2,
+      ),
+    );
+  }
+
   Widget _buildLegendItem(Color color, String label) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 12,
@@ -623,107 +912,28 @@ class _StatsScreenState extends State<StatsScreen> {
             shape: BoxShape.circle,
           ),
         ),
-        const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 12)),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12),
+        ),
       ],
-    );
-  }
-
-  String _getPeriodTitle() {
-    final now = DateTime.now();
-    final weekStart = now.subtract(Duration(days: now.weekday - 1 + (7 * selectedWeekOffset)));
-    switch (selectedPeriod) {
-      case 'Daily':
-        return 'Aujourd\'hui';
-      case 'Weekly':
-        return 'Semaine du ${weekStart.day}/${weekStart.month}/${weekStart.year}';
-      case 'Monthly':
-        return 'Semaine $selectedWeek - ${_getMonthName(selectedMonth)}';
-      case 'Yearly':
-        return 'Année $selectedYear';
-      default:
-        return selectedPeriod;
-    }
-  }
-
-  Widget _buildBarChart() {
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: _getMaxYValue(),
-        barTouchData: BarTouchData(
-          enabled: true,
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (group) => Colors.black87,
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              final label = rodIndex == 0 ? 'Budget' : 'Dépenses';
-              return BarTooltipItem(
-                '$label\n${rod.toY.toStringAsFixed(0)} FCFA',
-                const TextStyle(color: Colors.white),
-              );
-            },
-          ),
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 30,
-              getTitlesWidget: (double value, TitleMeta meta) {
-                final labels = _getPeriodLabels();
-                if (value.toInt() >= 0 && value.toInt() < labels.length) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      labels[value.toInt()],
-                      style: const TextStyle(color: Colors.grey, fontSize: 10),
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
-          ),
-          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        ),
-        borderData: FlBorderData(show: false),
-        gridData: const FlGridData(show: false),
-        barGroups: _buildBarChartData(),
-      ),
-    );
-  }
-
-  Widget _buildPieChart() {
-    return PieChart(
-      PieChartData(
-        sections: _buildPieChartData(),
-        sectionsSpace: 2,
-        centerSpaceRadius: 50,
-        startDegreeOffset: -90,
-        pieTouchData: PieTouchData(
-          touchCallback: (FlTouchEvent event, pieTouchResponse) {
-            // Optionnel : ajouter des interactions
-          },
-        ),
-      ),
     );
   }
 
   Widget _detailItem(String label, String value, IconData icon, {bool isTotal = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white70, size: 16),
-          const SizedBox(width: 8),
+          Icon(icon, color: Colors.white70, size: 18),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               label,
               style: TextStyle(
                 color: Colors.white,
+                fontSize: isTotal ? 16 : 14,
                 fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
               ),
             ),
@@ -732,13 +942,32 @@ class _StatsScreenState extends State<StatsScreen> {
             value,
             style: TextStyle(
               color: Colors.white,
-              fontWeight: FontWeight.bold,
               fontSize: isTotal ? 16 : 14,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _getPeriodTitle() {
+    switch (selectedPeriod) {
+      case 'Daily':
+        return 'Résumé du jour';
+      case 'Weekly':
+        return selectedWeekOffset == 0 
+            ? 'Résumé de la semaine actuelle' 
+            : selectedWeekOffset > 0 
+                ? 'Résumé de la semaine future' 
+                : 'Résumé de la semaine passée';
+      case 'Monthly':
+        return 'Résumé de ${_getMonthName(selectedMonth)} $selectedYear - Semaine $selectedWeek';
+      case 'Yearly':
+        return 'Résumé de l\'année $selectedYear';
+      default:
+        return 'Résumé';
+    }
   }
 
   String _getMonthName(int month) {

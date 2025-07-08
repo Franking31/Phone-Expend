@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../services/wallet_database.dart';
-import 'package:file_picker/file_picker.dart';
-import 'dart:io';
+import 'package:file_picker/file_picker.dart'; // Retenir cet import si nécessaire
 
 class MinepatBudgetScreen extends StatefulWidget {
   const MinepatBudgetScreen({super.key});
@@ -37,16 +36,22 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
     try {
       final db = await WalletDatabase.instance.database;
       final result = await db.query('budgets', where: 'source = ?', whereArgs: ['MINEPAT']);
-      setState(() {
-        _budgets = result.map((e) => Map<String, dynamic>.from(e)).toList();
-        _sortBudgets();
-      });
+      if (mounted) {
+        setState(() {
+          _budgets = result.map((e) => Map<String, dynamic>.from(e)).toList();
+          _sortBudgets();
+        });
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur de chargement : $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur de chargement : $e')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -79,39 +84,50 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
         type: FileType.custom,
         allowedExtensions: ['pdf'],
       );
-      if (result != null && result.files.single.path != null) {
+      if (result != null && result.files.single.path != null && mounted) {
         setState(() {
           _selectedFilePath = result.files.single.path;
           _justificatifController.text = result.files.single.name;
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur lors de la sélection du fichier : $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de la sélection du fichier : $e')),
+        );
+      }
     }
   }
 
   Future<void> _saveBudget() async {
-    if (!_formKey.currentState!.validate()) return;
+    // print("Début de _saveBudget()"); // Remplacer par un logger
+    if (!_formKey.currentState!.validate()) {
+      // print("Validation échouée");
+      return;
+    }
+    // print("Validation réussie");
     final amount = double.parse(_budgetController.text);
     final category = _categoryController.text.isEmpty ? 'General' : _categoryController.text;
+    final budgetName = _nameController.text.isEmpty ? 'Sans nom' : _nameController.text;
     final budgetData = {
       'source': 'MINEPAT',
       'amount': amount,
       'category': category,
-      'nom': _nameController.text,
+      'nom': budgetName,
       'description': _descriptionController.text,
       'justificatif': _selectedFilePath ?? '',
       'date': DateTime.now().toIso8601String(),
-    };
+    }; // Suppression de 'startDate' et 'endDate'
 
     try {
+      // print("Ouverture de la base de données");
       final db = await WalletDatabase.instance.database;
       if (_editingBudgetId != null) {
+        // print("Mise à jour du budget avec ID: $_editingBudgetId");
         await db.update('budgets', budgetData, where: 'id = ?', whereArgs: [_editingBudgetId]);
         setState(() => _editingBudgetId = null);
       } else {
+        // print("Insertion d'un nouveau budget");
         await db.insert('budgets', budgetData);
       }
       _budgetController.clear();
@@ -121,18 +137,49 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
       _justificatifController.clear();
       _selectedFilePath = null;
       await _loadBudgets();
-      Navigator.pop(context);
+
+      // Ajouter une transaction pour le budget
+      final transaction = {
+        'type': 'income',
+        'source': 'MINEPAT',
+        'amount': amount,
+        'description': 'Ajout de budget MINEPAT: $budgetName',
+        'date': DateTime.now().toIso8601String(),
+      };
+      // print("Tentative d'insertion de la transaction: $transaction");
+      final transactionId = await db.insert('transactions', transaction);
+      // print("Transaction insérée avec ID: $transactionId");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Budget "$budgetName" enregistré avec succès. Transaction ID: $transactionId'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+
+      // Retourner true pour signaler un rechargement dans home_wallet_screen.dart
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur lors de l\'enregistrement : $e')),
-      );
+      // print("Erreur lors de l'enregistrement ou de l'insertion de la transaction: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'enregistrement : $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
+    // print("Fin de _saveBudget()");
   }
 
   Future<void> _editBudget(int id) async {
     final db = await WalletDatabase.instance.database;
     final budget = await db.query('budgets', where: 'id = ?', whereArgs: [id], limit: 1);
-    if (budget.isNotEmpty) {
+    if (budget.isNotEmpty && mounted) {
       setState(() {
         _editingBudgetId = budget.first['id'] as int;
         _budgetController.text = (budget.first['amount'] as double).toString();
@@ -166,11 +213,13 @@ class _MinepatBudgetScreenState extends State<MinepatBudgetScreen> {
       try {
         final db = await WalletDatabase.instance.database;
         await db.delete('budgets', where: 'id = ?', whereArgs: [id]);
-        await _loadBudgets();
+        if (mounted) await _loadBudgets();
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la suppression : $e')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erreur lors de la suppression : $e')),
+          );
+        }
       }
     }
   }
