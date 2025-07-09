@@ -1,4 +1,7 @@
+// main.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:padidja_expense_app/providers/theme_provider.dart';
 import 'package:padidja_expense_app/screens/add_expense_screen.dart';
 import 'package:padidja_expense_app/screens/add_transaction_screen.dart';
 import 'package:padidja_expense_app/screens/add_users_screen.dart';
@@ -19,7 +22,15 @@ import 'services/database_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DatabaseService.database;
-  runApp(const PadidjaApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        // Ajoutez d'autres providers si nécessaire
+      ],
+      child: const PadidjaApp(),
+    ),
+  );
 }
 
 class PadidjaApp extends StatelessWidget {
@@ -36,35 +47,35 @@ class PadidjaApp extends StatelessWidget {
       role: 'user',
     );
 
-    return MaterialApp(
-      title: 'Padidja Dépenses',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.indigo,
-        scaffoldBackgroundColor: Colors.white,
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
-        ),
-      ),
-      initialRoute: '/login', // Start with login, then navigate to verification
-      routes: {
-        '/': (context) => const SplashScreen(),
-        '/login': (context) => const AuthScreen(),
-        '/home': (context) => const HomeScreen(),
-        '/add': (context) => const AddExpenseScreen(),
-        '/stats': (context) => const StatsScreen(),
-        '/history': (context) => const HistoryScreen(),
-        '/adduser': (context) => UserFormPage(),
-        '/userpage': (context) => UserListPage(),
-        '/spendline': (context) => const SpendLinePage(),
-        '/settings': (context) => SettingsPage(utilisateur: placeholderUser),
-        '/addwallet': (context) => const AddWalletScreen(),
-        '/addTransaction': (context) => const AddTransactionScreen(),
-        '/wallets': (context) => const WalletHomeScreen(),
-        '/verifyWallet': (context) => const WalletVerificationScreen(
-              currentTotalBalance: 0.0,
-              globalWalletLimit: double.infinity,
-            ),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          title: 'Padidja Dépenses',
+          debugShowCheckedModeBanner: false,
+          theme: themeProvider.lightTheme,
+          darkTheme: themeProvider.darkTheme,
+          themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          initialRoute: '/login', // Start with login, then navigate to verification
+          routes: {
+            '/': (context) => const SplashScreen(),
+            '/login': (context) => const AuthScreen(),
+            '/home': (context) => const HomeScreen(),
+            '/add': (context) => const AddExpenseScreen(),
+            '/stats': (context) => const StatsScreen(),
+            '/history': (context) => const HistoryScreen(),
+            '/adduser': (context) => UserFormPage(),
+            '/userpage': (context) => UserListPage(),
+            '/spendline': (context) => const SpendLinePage(),
+            '/settings': (context) => SettingsPage(utilisateur: placeholderUser),
+            '/addwallet': (context) => const AddWalletScreen(),
+            '/addTransaction': (context) => const AddTransactionScreen(),
+            '/wallets': (context) => const WalletHomeScreen(),
+            '/verifyWallet': (context) => const WalletVerificationScreen(
+                  currentTotalBalance: 0.0,
+                  globalWalletLimit: double.infinity,
+                ),
+          },
+        );
       },
     );
   }
