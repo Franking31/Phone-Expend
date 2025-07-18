@@ -20,9 +20,46 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final _descriptionController = TextEditingController();
   final _budgetController = TextEditingController();
   final _proofController = TextEditingController();
+  final _categoryController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
   
   List<File> _selectedFiles = [];
+  String? _selectedCategory;
+  
+  // Catégories prédéfinies
+  final List<String> _predefinedCategories = [
+    'Alimentation',
+    'Transport',
+    'Logement',
+    'Santé',
+    'Loisirs',
+    'Vêtements',
+    'Éducation',
+    'Services',
+    'Autre'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExistingCategories();
+  }
+
+  Future<void> _loadExistingCategories() async {
+    try {
+      final existingCategories = await SpendLineDatabase.instance.getAllCategories();
+      setState(() {
+        // Ajouter les catégories existantes qui ne sont pas déjà dans la liste prédéfinie
+        for (String category in existingCategories) {
+          if (!_predefinedCategories.contains(category)) {
+            _predefinedCategories.add(category);
+          }
+        }
+      });
+    } catch (e) {
+      print('Erreur lors du chargement des catégories: $e');
+    }
+  }
 
   void _selectDate() async {
     final picked = await showDatePicker(
@@ -36,6 +73,91 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         _selectedDate = picked;
       });
     }
+  }
+
+  void _showCategoryDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Sélectionner une catégorie'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _predefinedCategories.length,
+              itemBuilder: (context, index) {
+                final category = _predefinedCategories[index];
+                return ListTile(
+                  title: Text(category),
+                  onTap: () {
+                    setState(() {
+                      _selectedCategory = category;
+                      _categoryController.text = category;
+                    });
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () {
+                _showCustomCategoryDialog();
+                Navigator.pop(context);
+              },
+              child: const Text('Personnalisé'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showCustomCategoryDialog() {
+    final customCategoryController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Catégorie personnalisée'),
+          content: TextField(
+            controller: customCategoryController,
+            decoration: const InputDecoration(
+              hintText: 'Nom de la catégorie',
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () {
+                final customCategory = customCategoryController.text.trim();
+                if (customCategory.isNotEmpty) {
+                  setState(() {
+                    _selectedCategory = customCategory;
+                    _categoryController.text = customCategory;
+                    if (!_predefinedCategories.contains(customCategory)) {
+                      _predefinedCategories.add(customCategory);
+                    }
+                  });
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Confirmer'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _pickDocuments() async {
@@ -92,6 +214,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   @override
   Widget build(BuildContext context) {
     final themeColor = const Color(0xFF6074F9);
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth > 600;
 
     return MainDrawerWrapper(
       child: Builder(
@@ -99,8 +224,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           backgroundColor: Colors.grey[100],
           body: Column(
             children: [
+              // Header avec hauteur flexible
               Container(
-                height: 200,
+                height: screenHeight * 0.25,
+                constraints: const BoxConstraints(
+                  minHeight: 150,
+                  maxHeight: 250,
+                ),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -114,8 +244,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 ),
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.all(isTablet ? 30 : 20),
                     child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
@@ -123,7 +254,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                             buildNotificationAction(innerContext),
                           ],
                         ),
-                        const SizedBox(height: 30),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.start,
                           children: [
@@ -147,12 +277,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                               ),
                             ),
                             const SizedBox(width: 20),
-                            const Text(
-                              'Add Spend Line',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                            Expanded(
+                              child: Text(
+                                'Add Spend Line',
+                                style: TextStyle(
+                                  fontSize: isTablet ? 28 : 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ],
@@ -162,182 +294,212 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   ),
                 ),
               ),
+              // Contenu principal
               Expanded(
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildField(
-                            controller: _lineNameController,
-                            hintText: 'Line Name',
-                          ),
-                          const SizedBox(height: 20),
-                          _buildField(
-                            controller: _descriptionController,
-                            hintText: 'Description',
-                          ),
-                          const SizedBox(height: 20),
-                          _buildField(
-                            controller: _budgetController,
-                            hintText: 'Budget',
-                            keyboard: TextInputType.number,
-                          ),
-                          const SizedBox(height: 20),
-                          _buildFieldWithIcon(
-                            controller: _proofController,
-                            hintText: 'Ajouter des documents justificatifs',
-                            icon: Icons.attach_file,
-                            onTap: _showFileSelectionOptions,
-                          ),
-                          const SizedBox(height: 10),
-                          if (_selectedFiles.isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: const Color(0xFF6074F9).withOpacity(0.2),
-                                  width: 1,
-                                ),
+                child: Center(
+                  child: Container(
+                    width: isTablet ? 600 : double.infinity,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Padding(
+                        padding: EdgeInsets.all(isTablet ? 30 : 20),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildField(
+                                controller: _lineNameController,
+                                hintText: 'Line Name',
+                                isTablet: isTablet,
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Documents sélectionnés:',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
+                              SizedBox(height: isTablet ? 25 : 20),
+                              _buildField(
+                                controller: _descriptionController,
+                                hintText: 'Description',
+                                isTablet: isTablet,
+                              ),
+                              SizedBox(height: isTablet ? 25 : 20),
+                              _buildField(
+                                controller: _budgetController,
+                                hintText: 'Budget',
+                                keyboard: TextInputType.number,
+                                isTablet: isTablet,
+                              ),
+                              SizedBox(height: isTablet ? 25 : 20),
+                              // Nouveau champ catégorie
+                              _buildFieldWithIcon(
+                                controller: _categoryController,
+                                hintText: 'Catégorie',
+                                icon: Icons.category,
+                                onTap: _showCategoryDialog,
+                                isTablet: isTablet,
+                              ),
+                              SizedBox(height: isTablet ? 25 : 20),
+                              _buildFieldWithIcon(
+                                controller: _proofController,
+                                hintText: 'Ajouter des documents justificatifs',
+                                icon: Icons.attach_file,
+                                onTap: _showFileSelectionOptions,
+                                isTablet: isTablet,
+                              ),
+                              SizedBox(height: isTablet ? 15 : 10),
+                              if (_selectedFiles.isNotEmpty)
+                                Container(
+                                  padding: EdgeInsets.all(isTablet ? 20 : 16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: const Color(0xFF6074F9).withOpacity(0.2),
+                                      width: 1,
                                     ),
                                   ),
-                                  const SizedBox(height: 10),
-                                  ...List.generate(_selectedFiles.length, (index) {
-                                    final file = _selectedFiles[index];
-                                    final fileName = file.path.split('/').last;
-                                    final extension = fileName.split('.').last.toLowerCase();
-                                    IconData fileIcon;
-                                    switch (extension) {
-                                      case 'pdf':
-                                        fileIcon = Icons.picture_as_pdf;
-                                        break;
-                                      case 'doc':
-                                      case 'docx':
-                                        fileIcon = Icons.description;
-                                        break;
-                                      case 'xlsx':
-                                      case 'xls':
-                                        fileIcon = Icons.table_chart;
-                                        break;
-                                      case 'txt':
-                                        fileIcon = Icons.text_snippet;
-                                        break;
-                                      default:
-                                        fileIcon = Icons.insert_drive_file;
-                                    }
-                                    return Container(
-                                      margin: const EdgeInsets.only(bottom: 8),
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[50],
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.grey[300]!),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Documents sélectionnés:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: isTablet ? 18 : 16,
+                                        ),
                                       ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            fileIcon,
-                                            color: const Color(0xFF6074F9),
-                                            size: 20,
+                                      SizedBox(height: isTablet ? 15 : 10),
+                                      ...List.generate(_selectedFiles.length, (index) {
+                                        final file = _selectedFiles[index];
+                                        final fileName = file.path.split('/').last;
+                                        final extension = fileName.split('.').last.toLowerCase();
+                                        IconData fileIcon;
+                                        switch (extension) {
+                                          case 'pdf':
+                                            fileIcon = Icons.picture_as_pdf;
+                                            break;
+                                          case 'doc':
+                                          case 'docx':
+                                            fileIcon = Icons.description;
+                                            break;
+                                          case 'xlsx':
+                                          case 'xls':
+                                            fileIcon = Icons.table_chart;
+                                            break;
+                                          case 'txt':
+                                            fileIcon = Icons.text_snippet;
+                                            break;
+                                          default:
+                                            fileIcon = Icons.insert_drive_file;
+                                        }
+                                        return Container(
+                                          margin: EdgeInsets.only(bottom: isTablet ? 10 : 8),
+                                          padding: EdgeInsets.all(isTablet ? 16 : 12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[50],
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.grey[300]!),
                                           ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: Text(
-                                              fileName,
-                                              style: const TextStyle(fontSize: 14),
-                                              overflow: TextOverflow.ellipsis,
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                fileIcon,
+                                                color: const Color(0xFF6074F9),
+                                                size: isTablet ? 24 : 20,
+                                              ),
+                                              SizedBox(width: isTablet ? 15 : 10),
+                                              Expanded(
+                                                child: Text(
+                                                  fileName,
+                                                  style: TextStyle(
+                                                    fontSize: isTablet ? 16 : 14,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: Icon(
+                                                  Icons.close,
+                                                  color: Colors.red,
+                                                  size: isTablet ? 24 : 20,
+                                                ),
+                                                onPressed: () => _removeFile(index),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                    ],
+                                  ),
+                                ),
+                              SizedBox(height: isTablet ? 25 : 20),
+                              _buildFieldWithIcon(
+                                controller: TextEditingController(
+                                  text: DateFormat('dd/MM/yyyy').format(_selectedDate),
+                                ),
+                                hintText: 'Time',
+                                icon: Icons.calendar_today,
+                                onTap: _selectDate,
+                                isTablet: isTablet,
+                              ),
+                              SizedBox(height: isTablet ? 50 : 40),
+                              // Bouton responsive
+                              Center(
+                                child: SizedBox(
+                                  width: isTablet ? 150 : 120,
+                                  height: isTablet ? 55 : 45,
+                                  child: ElevatedButton(
+                                    onPressed: () async {
+                                      try {
+                                        if (_formKey.currentState!.validate()) {
+                                          List<String> filePaths = _selectedFiles.map((file) => file.path).toList();
+                                          final line = SpendLine(
+                                            name: _lineNameController.text.trim(),
+                                            description: _descriptionController.text.trim(),
+                                            budget: double.tryParse(_budgetController.text) ?? 0,
+                                            proof: filePaths.join(';'),
+                                            date: _selectedDate,
+                                            category: _selectedCategory ?? 'Autre', // Ajout de la catégorie
+                                          );
+                                          print("Tentative d'insertion: $line");
+                                          await SpendLineDatabase.instance.insert(line);
+                                          if (!mounted) return;
+                                          ScaffoldMessenger.of(innerContext).showSnackBar(
+                                            const SnackBar(content: Text('Ligne de dépense ajoutée ✅')),
+                                          );
+                                          Navigator.pop(innerContext, true);
+                                        }
+                                      } catch (e) {
+                                        print("Erreur lors de l'insertion: $e");
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(innerContext).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Erreur: ${e.toString()}'),
+                                              backgroundColor: Colors.red,
                                             ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.close, color: Colors.red, size: 20),
-                                            onPressed: () => _removeFile(index),
-                                          ),
-                                        ],
+                                          );
+                                        }
+                                      }
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: themeColor,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(25),
                                       ),
-                                    );
-                                  }),
-                                ],
-                              ),
-                            ),
-                          const SizedBox(height: 20),
-                          _buildFieldWithIcon(
-                            controller: TextEditingController(
-                              text: DateFormat('dd/MM/yyyy').format(_selectedDate),
-                            ),
-                            hintText: 'Time',
-                            icon: Icons.calendar_today,
-                            onTap: _selectDate,
-                          ),
-                          const SizedBox(height: 40),
-                          SizedBox(
-                            width: 120,
-                            height: 45,
-                            child: ElevatedButton(
-                              onPressed: () async {
-                                try {
-                                  if (_formKey.currentState!.validate()) {
-                                    List<String> filePaths = _selectedFiles.map((file) => file.path).toList();
-                                    final line = SpendLine(
-                                      name: _lineNameController.text.trim(),
-                                      description: _descriptionController.text.trim(),
-                                      budget: double.tryParse(_budgetController.text) ?? 0,
-                                      proof: filePaths.join(';'),
-                                      date: _selectedDate,
-                                    );
-                                    print("Tentative d'insertion: $line");
-                                    await SpendLineDatabase.instance.insert(line);
-                                    if (!mounted) return;
-                                    ScaffoldMessenger.of(innerContext).showSnackBar(
-                                      const SnackBar(content: Text('Ligne de dépense ajoutée ✅')),
-                                    );
-                                    // Retourner true pour indiquer que la dépense a été ajoutée
-                                    Navigator.pop(innerContext, true);
-                                  }
-                                } catch (e) {
-                                  print("Erreur lors de l'insertion: $e");
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(innerContext).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Erreur: ${e.toString()}'),
-                                        backgroundColor: Colors.red,
+                                      elevation: 3,
+                                    ),
+                                    child: Text(
+                                      'ADD',
+                                      style: TextStyle(
+                                        fontSize: isTablet ? 16 : 14,
+                                        fontWeight: FontWeight.bold,
                                       ),
-                                    );
-                                  }
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: themeColor,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(25),
-                                ),
-                                elevation: 3,
-                              ),
-                              child: const Text(
-                                'ADD',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                              SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 20),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -354,6 +516,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     required TextEditingController controller,
     required String hintText,
     TextInputType keyboard = TextInputType.text,
+    bool isTablet = false,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -377,10 +540,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         keyboardType: keyboard,
         decoration: InputDecoration(
           hintText: hintText,
-          hintStyle: TextStyle(color: Colors.grey[600], fontSize: 16),
+          hintStyle: TextStyle(
+            color: Colors.grey[600],
+            fontSize: isTablet ? 18 : 16,
+          ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: isTablet ? 25 : 20,
+            vertical: isTablet ? 20 : 15,
+          ),
         ),
+        style: TextStyle(fontSize: isTablet ? 18 : 16),
         validator: (value) {
           if (value == null || value.isEmpty) {
             return 'This field is required';
@@ -396,6 +566,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     required String hintText,
     required IconData icon,
     VoidCallback? onTap,
+    bool isTablet = false,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -420,11 +591,22 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         onTap: onTap,
         decoration: InputDecoration(
           hintText: hintText,
-          hintStyle: TextStyle(color: Colors.grey[600], fontSize: 16),
+          hintStyle: TextStyle(
+            color: Colors.grey[600],
+            fontSize: isTablet ? 18 : 16,
+          ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-          suffixIcon: Icon(icon, color: Colors.grey[600]),
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: isTablet ? 25 : 20,
+            vertical: isTablet ? 20 : 15,
+          ),
+          suffixIcon: Icon(
+            icon,
+            color: Colors.grey[600],
+            size: isTablet ? 24 : 20,
+          ),
         ),
+        style: TextStyle(fontSize: isTablet ? 18 : 16),
         validator: (value) {
           if (value == null || value.isEmpty) {
             return 'This field is required';
@@ -441,6 +623,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     _descriptionController.dispose();
     _budgetController.dispose();
     _proofController.dispose();
+    _categoryController.dispose();
     super.dispose();
   }
 }

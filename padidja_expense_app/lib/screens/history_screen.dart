@@ -5,7 +5,7 @@ import '../widgets/main_drawer_wrapper.dart';
 import '../services/wallet_database.dart';
 import '../models/transaction.dart' as trans;
 import '../services/spend_line_database.dart';
-import '../models/spend_line.dart';
+
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -67,19 +67,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
     try {
       await WalletDatabase.instance.debugDatabase();
       
-      // Récupération des transactions de portefeuille
       final walletTransactions = await WalletDatabase.instance.getAllTransactions();
       print("Transactions chargées depuis WalletDatabase : ${walletTransactions.length}");
       
-      // Récupération des dépenses
       final spendLines = await SpendLineDatabase.instance.getAll();
       print("Dépenses chargées depuis SpendLineDatabase : ${spendLines.length}");
       
-      // Récupération des budgets
       final budgets = await WalletDatabase.instance.getAllBudgets();
       print("Budgets chargés depuis WalletDatabase : ${budgets.length}");
       
-      // Conversion des dépenses en transactions
       final expenseTransactions = spendLines.map((spendLine) {
         return trans.Transaction(
           id: spendLine.id ?? 0,
@@ -91,7 +87,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         );
       }).toList();
 
-      // Conversion des budgets en transactions
       final budgetTransactions = budgets.map((budget) {
         DateTime budgetDate;
         if (budget['date'] != null && budget['date'].toString().isNotEmpty) {
@@ -114,10 +109,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         );
       }).toList();
 
-      // Fusion de toutes les transactions
       final allTransactions = [...walletTransactions, ...expenseTransactions, ...budgetTransactions];
       
-      // Tri par date décroissante
       allTransactions.sort((a, b) => b.date.compareTo(a.date));
       
       setState(() {
@@ -144,17 +137,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final themeColor = const Color(0xFF6074F9);
+    final theme = Theme.of(context);
+    final themeColor = theme.colorScheme.primary;
 
     return MainDrawerWrapper(
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: theme.scaffoldBackgroundColor,
         body: Column(
           children: [
             Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFF6074F9),
-                borderRadius: BorderRadius.only(
+              decoration: BoxDecoration(
+                color: themeColor,
+                borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(30),
                   bottomRight: Radius.circular(30),
                 ),
@@ -168,12 +162,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const SizedBox(width: 40),
-                          const Text(
+                          Text(
                             'Historique',
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: theme.colorScheme.onPrimary,
                             ),
                           ),
                           buildNotificationAction(context),
@@ -183,7 +177,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       Container(
                         height: 45,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
+                          color: theme.colorScheme.onPrimary.withOpacity(0.9),
                           borderRadius: BorderRadius.circular(25),
                         ),
                         child: Row(
@@ -197,18 +191,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       _searchTerm = value;
                                     });
                                   },
-                                  decoration: const InputDecoration(
+                                  decoration: InputDecoration(
                                     border: InputBorder.none,
                                     hintText: 'Rechercher...',
+                                    hintStyle: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.5)),
                                   ),
                                 ),
                               ),
                             ),
                             Container(
                               padding: const EdgeInsets.all(8),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.search,
-                                color: Colors.black54,
+                                color: theme.colorScheme.onSurface.withOpacity(0.6),
                                 size: 20,
                               ),
                             ),
@@ -228,10 +223,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   children: [
                     Text(
                       'Toutes les transactions (${_filteredTransactions.length})',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black,
+                        color: theme.colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -239,8 +234,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
                         onPressed: _loadTransactions,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Actualiser'),
+                        icon: Icon(Icons.refresh, color: themeColor),
+                        label: Text('Actualiser', style: TextStyle(color: themeColor)),
                         style: TextButton.styleFrom(
                           foregroundColor: themeColor,
                         ),
@@ -249,7 +244,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     const SizedBox(height: 10),
                     Expanded(
                       child: _isLoading
-                          ? const Center(child: CircularProgressIndicator())
+                          ? Center(child: CircularProgressIndicator(color: themeColor))
                           : _filteredTransactions.isEmpty
                               ? Center(
                                   child: Column(
@@ -258,7 +253,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       Icon(
                                         Icons.receipt_long_outlined,
                                         size: 64,
-                                        color: Colors.grey[400],
+                                        color: theme.colorScheme.onSurface.withOpacity(0.4),
                                       ),
                                       const SizedBox(height: 16),
                                       Text(
@@ -267,7 +262,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                             : 'Aucune transaction trouvée',
                                         style: TextStyle(
                                           fontSize: 18,
-                                          color: Colors.grey[600],
+                                          color: theme.colorScheme.onSurface.withOpacity(0.6),
                                         ),
                                       ),
                                       if (_searchTerm.isEmpty) ...[
@@ -277,7 +272,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                           textAlign: TextAlign.center,
                                           style: TextStyle(
                                             fontSize: 14,
-                                            color: Colors.grey[500],
+                                            color: theme.colorScheme.onSurface.withOpacity(0.5),
                                           ),
                                         ),
                                       ],
@@ -286,6 +281,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 )
                               : RefreshIndicator(
                                   onRefresh: _loadTransactions,
+                                  color: themeColor,
                                   child: ListView.builder(
                                     itemCount: _filteredTransactions.length,
                                     itemBuilder: (context, index) {
@@ -300,7 +296,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                         child: Container(
                                           padding: const EdgeInsets.all(16),
                                           decoration: BoxDecoration(
-                                            color: Colors.white,
+                                            color: theme.colorScheme.surface,
                                             borderRadius: BorderRadius.circular(16),
                                             border: Border.all(
                                               color: themeColor.withOpacity(0.2),
@@ -308,7 +304,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                             ),
                                             boxShadow: [
                                               BoxShadow(
-                                                color: Colors.grey.withOpacity(0.08),
+                                                color: theme.colorScheme.onSurface.withOpacity(0.08),
                                                 spreadRadius: 1,
                                                 blurRadius: 8,
                                                 offset: const Offset(0, 2),
@@ -360,9 +356,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                   children: [
                                                     Text(
                                                       tx.description,
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                         fontSize: 16,
                                                         fontWeight: FontWeight.w600,
+                                                        color: theme.colorScheme.onSurface,
                                                       ),
                                                       maxLines: 2,
                                                       overflow: TextOverflow.ellipsis,
@@ -374,21 +371,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                           tx.source,
                                                           style: TextStyle(
                                                             fontSize: 14,
-                                                            color: Colors.grey[600],
+                                                            color: theme.colorScheme.onSurface.withOpacity(0.6),
                                                             fontWeight: FontWeight.w500,
                                                           ),
                                                         ),
                                                         Text(
                                                           ' • ',
                                                           style: TextStyle(
-                                                            color: Colors.grey[400],
+                                                            color: theme.colorScheme.onSurface.withOpacity(0.4),
                                                           ),
                                                         ),
                                                         Text(
                                                           _getRelativeDate(tx.date),
                                                           style: TextStyle(
                                                             fontSize: 14,
-                                                            color: Colors.grey[600],
+                                                            color: theme.colorScheme.onSurface.withOpacity(0.6),
                                                           ),
                                                         ),
                                                       ],
@@ -400,14 +397,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                           _formatDate(tx.date),
                                                           style: TextStyle(
                                                             fontSize: 12,
-                                                            color: Colors.grey[500],
+                                                            color: theme.colorScheme.onSurface.withOpacity(0.5),
                                                           ),
                                                         ),
                                                         if (isBudget) ...[
                                                           Text(
                                                             ' • ',
                                                             style: TextStyle(
-                                                              color: Colors.grey[400],
+                                                              color: theme.colorScheme.onSurface.withOpacity(0.4),
                                                             ),
                                                           ),
                                                           Container(
@@ -454,14 +451,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                                   ? Colors.red
                                                                   : isBudget
                                                                       ? Colors.blue
-                                                                      : Colors.black,
+                                                                      : theme.colorScheme.onSurface,
                                                     ),
                                                   ),
-                                                  const Text(
+                                                  Text(
                                                     'FCFA',
                                                     style: TextStyle(
                                                       fontSize: 12,
-                                                      color: Colors.grey,
+                                                      color: theme.colorScheme.onSurface.withOpacity(0.5),
                                                     ),
                                                   ),
                                                 ],

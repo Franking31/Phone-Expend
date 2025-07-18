@@ -1,4 +1,3 @@
-// main.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:padidja_expense_app/providers/theme_provider.dart';
@@ -17,16 +16,18 @@ import 'package:padidja_expense_app/screens/stats_screen.dart';
 import 'package:padidja_expense_app/screens/user_page_screen.dart';
 import 'package:padidja_expense_app/screens/verify_wallet_screen.dart';
 import 'package:padidja_expense_app/models/user_model.dart';
-import 'services/database_service.dart';
+import 'package:padidja_expense_app/services/database_service.dart';
+import 'package:padidja_expense_app/services/supabase_service.dart';
+import 'package:padidja_expense_app/services/user_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DatabaseService.database;
+  await SupabaseService.initialize();
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        // Ajoutez d'autres providers si nécessaire
       ],
       child: const PadidjaApp(),
     ),
@@ -38,15 +39,6 @@ class PadidjaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Placeholder user data (replace with actual user data from authentication)
-    final placeholderUser = Utilisateur(
-      id: 1,
-      nom: 'Yennefer Doe',
-      email: 'yennefer.doe@email.com',
-      motDePasse: 'password123',
-      role: 'user',
-    );
-
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         return MaterialApp(
@@ -55,9 +47,8 @@ class PadidjaApp extends StatelessWidget {
           theme: themeProvider.lightTheme,
           darkTheme: themeProvider.darkTheme,
           themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-          initialRoute: '/login', // Start with login, then navigate to verification
+          home: const SplashScreen(),
           routes: {
-            '/': (context) => const SplashScreen(),
             '/login': (context) => const AuthScreen(),
             '/home': (context) => const HomeScreen(),
             '/add': (context) => const AddExpenseScreen(),
@@ -66,7 +57,15 @@ class PadidjaApp extends StatelessWidget {
             '/adduser': (context) => UserFormPage(),
             '/userpage': (context) => UserListPage(),
             '/spendline': (context) => const SpendLinePage(),
-            '/settings': (context) => SettingsPage(utilisateur: placeholderUser),
+            '/settings': (context) => SettingsPage(
+                  utilisateur: Utilisateur(
+                    id: '1',
+                    nom: 'Yennefer Doe',
+                    email: 'yennefer.doe@email.com',
+                    motDePasse: '',
+                    role: 'user',
+                  ),
+                ),
             '/addwallet': (context) => const AddWalletScreen(),
             '/addTransaction': (context) => const AddTransactionScreen(),
             '/wallets': (context) => const WalletHomeScreen(),

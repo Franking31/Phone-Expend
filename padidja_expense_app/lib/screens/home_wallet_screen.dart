@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/screens/verify_wallet_screen.dart';
-import 'package:padidja_expense_app/screens/notification_screen.dart';
 import 'package:padidja_expense_app/screens/history_screen.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';

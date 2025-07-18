@@ -53,6 +53,7 @@ class _EditSpendLineScreenState extends State<EditSpendLineScreen> {
         description: _descriptionController.text.trim(),
         budget: double.parse(_budgetController.text),
         proof: widget.spendLine.proof, // Garder la preuve existante
+        category: widget.spendLine.category, // Garder la catégorie existante
         date: widget.spendLine.date, // Garder la date existante
       );
 

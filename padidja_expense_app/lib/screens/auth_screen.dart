@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/user_service.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -13,6 +14,76 @@ class _AuthScreenState extends State<AuthScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  // Méthode pour gérer les erreurs de manière élégante
+  String _getErrorMessage(String error) {
+    // Convertir les erreurs techniques en messages user-friendly
+    if (error.toLowerCase().contains('network') || error.toLowerCase().contains('connection')) {
+      return "Problème de connexion. Vérifiez votre connexion internet.";
+    }
+    if (error.toLowerCase().contains('timeout')) {
+      return "La connexion a pris trop de temps. Veuillez réessayer.";
+    }
+    if (error.toLowerCase().contains('invalid') || error.toLowerCase().contains('wrong')) {
+      return "Identifiants incorrects. Vérifiez vos informations.";
+    }
+    if (error.toLowerCase().contains('email') && error.toLowerCase().contains('exists')) {
+      return "Cette adresse email est déjà utilisée.";
+    }
+    if (error.toLowerCase().contains('weak') || error.toLowerCase().contains('password')) {
+      return "Le mot de passe doit contenir au moins 6 caractères.";
+    }
+    if (error.toLowerCase().contains('user') && error.toLowerCase().contains('not found')) {
+      return "Aucun compte trouvé avec ces informations.";
+    }
+    
+    // Message générique pour les autres erreurs
+    return "Une erreur inattendue s'est produite. Veuillez réessayer.";
+  }
+
+  // Méthode pour afficher les messages avec style
+  void _showMessage(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.check_circle_outline,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: isError ? Colors.red[400] : Colors.green[400],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,8 +112,8 @@ class _AuthScreenState extends State<AuthScreen> {
                 const Text(
                   'Phone spend',
                   style: TextStyle(
-                    color: Colors.white, 
-                    fontSize: 32, 
+                    color: Colors.white,
+                    fontSize: 32,
                     fontWeight: FontWeight.w300,
                     letterSpacing: 1.2,
                   ),
@@ -51,7 +122,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 const Text(
                   'Take your spend in your hands',
                   style: TextStyle(
-                    color: Colors.white70, 
+                    color: Colors.white70,
                     fontSize: 16,
                     fontWeight: FontWeight.w300,
                   ),
@@ -107,33 +178,42 @@ class _AuthScreenState extends State<AuthScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: ElevatedButton(
-              onPressed: () {
+              onPressed: _isLoading ? null : () async {
                 if (_formKey.currentState!.validate()) {
+                  setState(() => _isLoading = true);
+                  try {
                     final email = _emailController.text.trim();
                     final password = _passwordController.text.trim();
 
                     if (isLogin) {
-                      // Exemple temporaire (sans base de données)
-                      if (email == "" && password == "") {
-                        Navigator.of(context).pushReplacementNamed('/home'); // ✅ navigation
+                      // Connexion
+                      final user = await UserService.connecterUtilisateur(email, password);
+                      if (user != null) {
+                        _showMessage("Connexion réussie ! Bienvenue 👋", isError: false);
+                        Navigator.of(context).pushReplacementNamed('/home');
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Email ou mot de passe incorrect")),
-                        );
+                        _showMessage("Email ou mot de passe incorrect", isError: true);
                       }
                     } else {
-                      // Sign in : tu peux ajouter une logique d'enregistrement ici
+                      // Inscription
                       if (password == _confirmPasswordController.text.trim()) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Compte créé avec succès (fictif)")),
+                        await UserService.inscrireUtilisateur(
+                          nom: email.split('@')[0], // Nom temporaire basé sur l'email
+                          email: email,
+                          motDePasse: password,
                         );
+                        _showMessage("Compte créé avec succès ! 🎉", isError: false);
                         setState(() => isLogin = true); // Retourne à Log in
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Les mots de passe ne correspondent pas")),
-                        );
+                        _showMessage("Les mots de passe ne correspondent pas", isError: true);
                       }
                     }
+                  } catch (e) {
+                    // Utiliser notre méthode pour convertir l'erreur
+                    _showMessage(_getErrorMessage(e.toString()), isError: true);
+                  } finally {
+                    setState(() => _isLoading = false);
+                  }
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -144,25 +224,27 @@ class _AuthScreenState extends State<AuthScreen> {
                   borderRadius: BorderRadius.circular(25),
                 ),
               ),
-              child: Text(
-                isLogin ? "Log in" : "Sign in",
-                style: const TextStyle(
-                  color: Colors.white, 
-                  fontSize: 16, 
-                  fontWeight: FontWeight.w500
-                ),
-              ),
+              child: _isLoading
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : Text(
+                      isLogin ? "Log in" : "Sign in",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
             ),
           ),
 
           const SizedBox(height: 30),
           const Text(
-            "or", 
+            "or",
             style: TextStyle(
-              color: Colors.grey, 
+              color: Colors.grey,
               fontSize: 16,
-              fontWeight: FontWeight.w400
-            )
+              fontWeight: FontWeight.w400,
+            ),
           ),
           const SizedBox(height: 25),
 
@@ -186,9 +268,9 @@ class _AuthScreenState extends State<AuthScreen> {
             child: Text(
               "Privacy policy • Terms of service",
               style: TextStyle(
-                fontSize: 12, 
+                fontSize: 12,
                 color: Colors.grey,
-                fontWeight: FontWeight.w400
+                fontWeight: FontWeight.w400,
               ),
             ),
           ),
@@ -207,13 +289,15 @@ class _AuthScreenState extends State<AuthScreen> {
         decoration: BoxDecoration(
           color: isActive ? activeColor : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: isActive ? [
-            BoxShadow(
-              color: activeColor.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            )
-          ] : null,
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: activeColor.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           label,
@@ -268,6 +352,12 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
         validator: (value) {
           if (value == null || value.isEmpty) return 'Ce champ est requis';
+          if (label.toLowerCase().contains('email') && !value.contains('@')) {
+            return 'Veuillez saisir une adresse email valide';
+          }
+          if (label.toLowerCase().contains('password') && value.length < 6) {
+            return 'Le mot de passe doit contenir au moins 6 caractères';
+          }
           return null;
         },
       ),
@@ -290,7 +380,7 @@ class _AuthScreenState extends State<AuthScreen> {
         ],
       ),
       child: Icon(
-        icon, 
+        icon,
         color: color,
         size: 24,
       ),

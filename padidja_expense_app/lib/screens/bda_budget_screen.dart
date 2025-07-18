@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:padidja_expense_app/models/screen_type.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../services/wallet_database.dart';
 import '../models/transaction.dart' as trans;
@@ -20,7 +21,6 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _justificatifController = TextEditingController();
-  
   List<Map<String, dynamic>> _budgets = [];
   List<Map<String, dynamic>> _filteredBudgets = [];
   bool _isLoading = false;
@@ -29,6 +29,63 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
   bool _sortAscending = true;
   String? _selectedFilePath;
 
+  // Méthode pour déterminer le type d'écran
+  ScreenType _getScreenType(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    if (width < 600) return ScreenType.mobile;
+    if (width < 1200) return ScreenType.tablet;
+    return ScreenType.desktop;
+  }
+
+  // Méthode pour obtenir les dimensions responsives
+  ResponsiveDimensions _getResponsiveDimensions(BuildContext context) {
+    final screenType = _getScreenType(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    switch (screenType) {
+      case ScreenType.mobile:
+        return ResponsiveDimensions(
+          headerHeight: screenHeight * 0.35,
+          padding: 16.0,
+          cardPadding: 16.0,
+          fontSize: 16.0,
+          titleFontSize: 18.0,
+          headerFontSize: 20.0,
+          buttonHeight: 45.0,
+          buttonWidth: screenWidth * 0.25,
+          maxContentWidth: screenWidth,
+          crossAxisCount: 1,
+        );
+      case ScreenType.tablet:
+        return ResponsiveDimensions(
+          headerHeight: screenHeight * 0.3,
+          padding: 24.0,
+          cardPadding: 20.0,
+          fontSize: 18.0,
+          titleFontSize: 20.0,
+          headerFontSize: 24.0,
+          buttonHeight: 50.0,
+          buttonWidth: 140.0,
+          maxContentWidth: screenWidth * 0.9,
+          crossAxisCount: 2,
+        );
+      case ScreenType.desktop:
+        return ResponsiveDimensions(
+          headerHeight: screenHeight * 0.25,
+          padding: 32.0,
+          cardPadding: 24.0,
+          fontSize: 16.0,
+          titleFontSize: 20.0,
+          headerFontSize: 28.0,
+          buttonHeight: 50.0,
+          buttonWidth: 150.0,
+          maxContentWidth: 1200.0,
+          crossAxisCount: 3,
+        );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -36,54 +93,62 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
   }
 
   Future<void> _loadBudgets() async {
-    if (!mounted) return;
+  if (!mounted) return;
+
+  setState(() => _isLoading = true);
+  try {
+    print("Tentative de connexion à la base de données...");
+    final db = await WalletDatabase.instance.database;
+    print("Base de données connectée avec succès");
     
-    setState(() => _isLoading = true);
-    try {
-      final db = await WalletDatabase.instance.database;
-      final result = await db.query('budgets', where: 'source = ?', whereArgs: ['BDA']);
-      
-      if (mounted) {
-        setState(() {
-          _budgets = result.map((e) => Map<String, dynamic>.from(e)).toList();
-          _sortBudgets();
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur de chargement : $e')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+    final result = await db.query('budgets', where: 'source = ?', whereArgs: ['BDA']);
+    print("Résultats de la requête : ${result.length} budgets trouvés");
+    
+    if (mounted) {
+      setState(() {
+        _budgets = result.map((e) => Map<String, dynamic>.from(e)).toList();
+        _sortBudgets();
+      });
+    }
+  } catch (e) {
+    print("Erreur lors du chargement des budgets : $e");
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur de chargement : $e')),
+      );
+    }
+  } finally {
+    if (mounted) {
+      setState(() => _isLoading = false);
     }
   }
+}
 
   void _sortBudgets() {
-    setState(() {
-      _filteredBudgets = List.from(_budgets);
-      _filteredBudgets.sort((a, b) {
-        int compare;
-        switch (_sortBy) {
-          case 'amount':
-            compare = (a['amount'] as double).compareTo(b['amount'] as double);
-            break;
-          case 'category':
-            compare = (a['category'] ?? '').compareTo(b['category'] ?? '');
-            break;
-          case 'nom':
-            compare = (a['nom'] ?? '').compareTo(b['nom'] ?? '');
-            break;
-          default:
-            compare = a['date'].compareTo(b['date']);
-        }
-        return _sortAscending ? compare : -compare;
-      });
+  setState(() {
+    _filteredBudgets = List.from(_budgets);
+    print("Nombre de budgets avant tri : ${_budgets.length}");
+    print("Nombre de budgets après tri : ${_filteredBudgets.length}");
+    
+    _filteredBudgets.sort((a, b) {
+      int compare;
+      switch (_sortBy) {
+        case 'amount':
+          compare = (a['amount'] as double).compareTo(b['amount'] as double);
+          break;
+        case 'category':
+          compare = (a['category'] ?? '').compareTo(b['category'] ?? '');
+          break;
+        case 'nom':
+          compare = (a['nom'] ?? '').compareTo(b['nom'] ?? '');
+          break;
+        default:
+          compare = (a['date'] ?? '').compareTo(b['date'] ?? '');
+      }
+      return _sortAscending ? compare : -compare;
     });
-  }
+  });
+}
 
   Future<void> _pickFile() async {
     try {
@@ -91,8 +156,7 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
         type: FileType.custom,
         allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
       );
-      
-      if (result != null && result.files.single.path != null) {
+      if (result != null && result.files.single.path != null && mounted) {
         setState(() {
           _selectedFilePath = result.files.single.path;
           _justificatifController.text = result.files.single.name;
@@ -109,13 +173,13 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
 
   Future<void> _saveBudget() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     try {
-      final amount = double.parse(_budgetController.text);
-      final category = _categoryController.text.isEmpty ? 'General' : _categoryController.text;
-      final name = _nameController.text;
-      final description = _descriptionController.text;
-      
+      final amount = double.parse(_budgetController.text.trim());
+      final category = _categoryController.text.isEmpty ? 'General' : _categoryController.text.trim();
+      final name = _nameController.text.isEmpty ? 'Sans nom' : _nameController.text.trim();
+      final description = _descriptionController.text.trim();
+
       final budgetData = {
         'source': 'BDA',
         'amount': amount,
@@ -128,10 +192,9 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
       };
 
       final db = await WalletDatabase.instance.database;
-      
+
       if (_editingBudgetId != null) {
         await db.update('budgets', budgetData, where: 'id = ?', whereArgs: [_editingBudgetId]);
-        
         final transaction = trans.Transaction(
           type: 'expense',
           source: 'BDA',
@@ -139,18 +202,19 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
           description: 'Modification de budget: $name',
           date: DateTime.now(),
         );
-        
         await WalletDatabase.instance.insertTransaction(transaction);
-        
         if (mounted) {
           setState(() => _editingBudgetId = null);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Budget modifié avec succès')),
+            const SnackBar(
+              content: Text('Budget modifié avec succès'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
           );
         }
       } else {
         await db.insert('budgets', budgetData);
-        
         final transaction = trans.Transaction(
           type: 'income',
           source: 'BDA',
@@ -158,27 +222,32 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
           description: 'Ajout de budget: $name ($category)',
           date: DateTime.now(),
         );
-        
         await WalletDatabase.instance.insertTransaction(transaction);
-        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Budget ajouté avec succès')),
+            const SnackBar(
+              content: Text('Budget ajouté avec succès'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
           );
         }
       }
-      
+
       _clearForm();
       await _loadBudgets();
-      
+
       if (mounted) {
         Navigator.pop(context);
       }
-      
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de l\'enregistrement : $e')),
+          SnackBar(
+            content: Text('Erreur lors de l\'enregistrement : $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }
@@ -197,7 +266,6 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
     try {
       final db = await WalletDatabase.instance.database;
       final budget = await db.query('budgets', where: 'id = ?', whereArgs: [id], limit: 1);
-      
       if (budget.isNotEmpty && mounted) {
         setState(() {
           _editingBudgetId = budget.first['id'] as int;
@@ -222,31 +290,29 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
   Future<void> _deleteBudget(int id) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Supprimer le budget'),
         content: const Text('Êtes-vous sûr de vouloir supprimer ce budget ?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Annuler'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Supprimer'),
           ),
         ],
       ),
     );
-    
+
     if (confirmed == true) {
       try {
         final db = await WalletDatabase.instance.database;
         final budgetDetails = await db.query('budgets', where: 'id = ?', whereArgs: [id], limit: 1);
-        
         if (budgetDetails.isNotEmpty) {
           final budget = budgetDetails.first;
-          
           final transaction = trans.Transaction(
             type: 'expense',
             source: 'BDA',
@@ -254,14 +320,16 @@ class _BdaBudgetScreenState extends State<BdaBudgetScreen> {
             description: 'Suppression de budget: ${budget['nom']} (${budget['category']})',
             date: DateTime.now(),
           );
-          
           await WalletDatabase.instance.insertTransaction(transaction);
           await db.delete('budgets', where: 'id = ?', whereArgs: [id]);
           await _loadBudgets();
-          
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Budget supprimé avec succès')),
+              const SnackBar(
+                content: Text('Budget supprimé avec succès'),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+              ),
             );
           }
         }
@@ -282,8 +350,8 @@ Budget BDA Details:
 - Amount: ${budget['amount']} FCFA
 - Category: ${budget['category'] ?? 'Non spécifiée'}
 - Description: ${budget['description'] ?? 'Aucune description'}
-- Date: ${budget['date']}
-${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justificatif: ${budget['justificatif'].split('/').last}' : ''}
+- Date: ${_formatDate(budget['date'])}
+${budget['justificatif'] != null && budget['justificatif'].toString().isNotEmpty ? '- Justificatif: ${budget['justificatif'].toString().split('/').last}' : ''}
 ''';
 
     try {
@@ -310,24 +378,30 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
   }
 
   void _showAddEditDialog() {
+    final dimensions = _getResponsiveDimensions(context);
+    final screenType = _getScreenType(context);
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(_editingBudgetId == null ? 'Ajouter un budget' : 'Modifier le budget'),
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          _editingBudgetId == null ? 'Ajouter un budget' : 'Modifier le budget',
+          style: TextStyle(fontSize: dimensions.titleFontSize),
+        ),
         content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.8,
+          width: screenType == ScreenType.desktop
+              ? 500
+              : MediaQuery.of(dialogContext).size.width * 0.9,
           child: SingleChildScrollView(
             child: Form(
               key: _formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextFormField(
+                  _buildFormField(
                     controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nom *',
-                      border: OutlineInputBorder(),
-                    ),
+                    label: 'Nom *',
+                    dimensions: dimensions,
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
                         return 'Entrez un nom';
@@ -335,15 +409,13 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
+                  SizedBox(height: dimensions.padding),
+                  _buildFormField(
                     controller: _budgetController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Montant *',
-                      border: OutlineInputBorder(),
-                      suffixText: 'FCFA',
-                    ),
+                    label: 'Montant *',
+                    dimensions: dimensions,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    suffixText: 'FCFA',
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
                         return 'Entrez un montant';
@@ -355,37 +427,31 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
+                  SizedBox(height: dimensions.padding),
+                  _buildFormField(
                     controller: _categoryController,
-                    decoration: const InputDecoration(
-                      labelText: 'Catégorie',
-                      border: OutlineInputBorder(),
-                      hintText: 'Optionnel',
-                    ),
+                    label: 'Catégorie',
+                    dimensions: dimensions,
+                    hintText: 'Optionnel',
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
+                  SizedBox(height: dimensions.padding),
+                  _buildFormField(
                     controller: _descriptionController,
-                    decoration: const InputDecoration(
-                      labelText: 'Description',
-                      border: OutlineInputBorder(),
-                      hintText: 'Optionnel',
-                    ),
+                    label: 'Description',
+                    dimensions: dimensions,
                     maxLines: 3,
+                    hintText: 'Optionnel',
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
+                  SizedBox(height: dimensions.padding),
+                  _buildFormField(
                     controller: _justificatifController,
+                    label: 'Justificatif',
+                    dimensions: dimensions,
                     readOnly: true,
-                    decoration: InputDecoration(
-                      labelText: 'Justificatif',
-                      border: const OutlineInputBorder(),
-                      hintText: 'Sélectionner un fichier',
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.attach_file),
-                        onPressed: _pickFile,
-                      ),
+                    hintText: 'Sélectionner un fichier',
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.attach_file),
+                      onPressed: _pickFile,
                     ),
                   ),
                 ],
@@ -398,7 +464,7 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
             onPressed: () {
               _clearForm();
               setState(() => _editingBudgetId = null);
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
             },
             child: const Text('Annuler'),
           ),
@@ -407,6 +473,7 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF6074F9),
               foregroundColor: Colors.white,
+              minimumSize: Size(dimensions.buttonWidth, dimensions.buttonHeight),
             ),
             child: Text(_editingBudgetId == null ? 'Ajouter' : 'Modifier'),
           ),
@@ -415,23 +482,58 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
     );
   }
 
+  Widget _buildFormField({
+    required TextEditingController controller,
+    required String label,
+    required ResponsiveDimensions dimensions,
+    TextInputType? keyboardType,
+    String? suffixText,
+    Widget? suffixIcon,
+    bool readOnly = false,
+    int maxLines = 1,
+    String? hintText,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      readOnly: readOnly,
+      maxLines: maxLines,
+      style: TextStyle(fontSize: dimensions.fontSize),
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        suffixText: suffixText,
+        suffixIcon: suffixIcon,
+        hintText: hintText,
+        contentPadding: EdgeInsets.all(dimensions.cardPadding * 0.75),
+      ),
+      validator: validator,
+    );
+  }
+
   void _showBudgetDetails(Map<String, dynamic> budget) {
+    final dimensions = _getResponsiveDimensions(context);
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Détails du budget'),
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          'Détails du budget',
+          style: TextStyle(fontSize: dimensions.titleFontSize),
+        ),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildDetailRow('Nom', budget['nom'] ?? 'Non spécifié'),
-              _buildDetailRow('Montant', '${budget['amount']} FCFA'),
-              _buildDetailRow('Catégorie', budget['category'] ?? 'Non spécifiée'),
-              _buildDetailRow('Description', budget['description'] ?? 'Aucune description'),
-              if (budget['justificatif'] != null && budget['justificatif'].isNotEmpty)
-                _buildDetailRow('Justificatif', budget['justificatif'].split('/').last),
-              _buildDetailRow('Date', _formatDate(budget['date'])),
+              _buildDetailRow('Nom', budget['nom'] ?? 'Non spécifié', dimensions),
+              _buildDetailRow('Montant', '${budget['amount']} FCFA', dimensions),
+              _buildDetailRow('Catégorie', budget['category'] ?? 'Non spécifiée', dimensions),
+              _buildDetailRow('Description', budget['description'] ?? 'Aucune description', dimensions),
+              if (budget['justificatif'] != null && budget['justificatif'].toString().isNotEmpty)
+                _buildDetailRow('Justificatif', budget['justificatif'].toString().split('/').last, dimensions),
+              _buildDetailRow('Date', _formatDate(budget['date'] ?? 'Non spécifiée'), dimensions),
             ],
           ),
         ),
@@ -441,7 +543,7 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
             child: const Text('Partager'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Fermer'),
           ),
         ],
@@ -449,26 +551,12 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(String label, String value, ResponsiveDimensions dimensions) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ),
-        ],
+      padding: EdgeInsets.only(bottom: dimensions.padding * 0.5),
+      child: Text(
+        '$label: $value',
+        style: TextStyle(fontSize: dimensions.fontSize),
       ),
     );
   }
@@ -484,262 +572,298 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
 
   @override
   Widget build(BuildContext context) {
+    final dimensions = _getResponsiveDimensions(context);
+    final screenType = _getScreenType(context);
     final totalBudget = _budgets.fold<double>(0.0, (sum, b) => sum + (b['amount'] as double));
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
       body: RefreshIndicator(
         onRefresh: _loadBudgets,
-        child: Column(
-          children: [
-            // Header
-            Container(
-              height: 280,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF6074F9), Color(0xFF6074F9)],
-                ),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(50),
-                  bottomRight: Radius.circular(50),
-                ),
-              ),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      // Navigation bar
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back, color: Colors.white),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                          const Expanded(
-                            child: Text(
-                              'Budget BDA',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          buildNotificationAction(context),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      // Total budget card
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.3),
-                            width: 1,
-                          ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: dimensions.maxContentWidth),
+            child: Column(
+              children: [
+                _buildHeader(dimensions, totalBudget),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.all(dimensions.padding),
+                    child: Column(
+                      children: [
+                        _buildControls(dimensions, screenType),
+                        SizedBox(height: dimensions.padding),
+                        _buildBudgetListHeader(dimensions),
+                        SizedBox(height: dimensions.padding),
+                        Expanded(
+                          child: _buildBudgetList(dimensions, screenType),
                         ),
-                        child: Column(
-                          children: [
-                            const Text(
-                              'Total Budget BDA',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${totalBudget.toStringAsFixed(2)} FCFA',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-            // Content
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    // Action buttons
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 120,
-                          height: 45,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              setState(() => _editingBudgetId = null);
-                              _clearForm();
-                              _showAddEditDialog();
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF6074F9),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(25),
-                              ),
-                              elevation: 3,
-                            ),
-                            child: const Text(
-                              'AJOUTER',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        // Sort dropdown
-                        Container(
-                          height: 45,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(25),
-                            border: Border.all(
-                              color: const Color(0xFF6074F9).withOpacity(0.2),
-                            ),
-                          ),
-                          child: DropdownButton<String>(
-                            value: _sortBy,
-                            onChanged: (String? newValue) {
-                              if (newValue != null) {
-                                setState(() {
-                                  _sortBy = newValue;
-                                  _sortBudgets();
-                                });
-                              }
-                            },
-                            items: const [
-                              DropdownMenuItem(value: 'date', child: Text('Date')),
-                              DropdownMenuItem(value: 'amount', child: Text('Montant')),
-                              DropdownMenuItem(value: 'category', child: Text('Catégorie')),
-                              DropdownMenuItem(value: 'nom', child: Text('Nom')),
-                            ],
-                            underline: Container(),
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        // Sort direction button
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _sortAscending = !_sortAscending;
-                              _sortBudgets();
-                            });
-                          },
-                          icon: Icon(
-                            _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
-                            color: const Color(0xFF6074F9),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 25),
-                    // List header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Liste des Budgets',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6074F9).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${_filteredBudgets.length}',
-                            style: const TextStyle(
-                              color: Color(0xFF6074F9),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    // Budget list
-                    Expanded(
-                      child: _isLoading
-                          ? const Center(
-                              child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Color(0xFF6074F9),
-                                ),
-                              ),
-                            )
-                          : _filteredBudgets.isEmpty
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.account_balance_wallet_outlined,
-                                        size: 64,
-                                        color: Colors.grey[400],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      const Text(
-                                        'Aucun budget',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              : ListView.builder(
-                                  itemCount: _filteredBudgets.length,
-                                  itemBuilder: (context, index) {
-                                    return Padding(
-                                      padding: const EdgeInsets.only(bottom: 12),
-                                      child: _buildBudgetItem(
-                                        _filteredBudgets[index],
-                                      ),
-                                    );
-                                  },
-                                ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildBudgetItem(Map<String, dynamic> budget) {
+  Widget _buildHeader(ResponsiveDimensions dimensions, double totalBudget) {
+  return Container(
+    height: dimensions.headerHeight,
+    width: double.infinity,
+    decoration: const BoxDecoration(
+      color: Color(0xFF6074F9), // Couleur simple au lieu du gradient
+      borderRadius: BorderRadius.only(
+        bottomLeft: Radius.circular(50),
+        bottomRight: Radius.circular(50),
+      ),
+    ),
+    child: SafeArea(
+      child: Padding(
+        padding: EdgeInsets.all(dimensions.padding),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                Text(
+                  'Budget BDA',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: dimensions.headerFontSize,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                // Remplacez buildNotificationAction(context) par :
+                IconButton(
+                  icon: const Icon(Icons.notifications, color: Colors.white),
+                  onPressed: () {},
+                ),
+              ],
+            ),
+            SizedBox(height: dimensions.padding * 1.5),
+            Container(
+              padding: EdgeInsets.all(dimensions.cardPadding),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'Total Budget BDA',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: dimensions.fontSize,
+                    ),
+                  ),
+                  SizedBox(height: dimensions.padding * 0.5),
+                  Text(
+                    '${totalBudget.toStringAsFixed(2)} FCFA',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: dimensions.headerFontSize * 1.2,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+  Widget _buildControls(ResponsiveDimensions dimensions, ScreenType screenType) {
+    return Wrap(
+      spacing: dimensions.padding,
+      runSpacing: dimensions.padding,
+      alignment: WrapAlignment.center,
+      children: [
+        SizedBox(
+          width: dimensions.buttonWidth,
+          height: dimensions.buttonHeight,
+          child: ElevatedButton(
+            onPressed: () {
+              setState(() => _editingBudgetId = null);
+              _clearForm();
+              _showAddEditDialog();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6074F9),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25),
+              ),
+              elevation: 3,
+            ),
+            child: Text(
+              'AJOUTER',
+              style: TextStyle(
+                fontSize: dimensions.fontSize * 0.9,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+        Container(
+          height: dimensions.buttonHeight,
+          padding: EdgeInsets.symmetric(horizontal: dimensions.padding * 0.75),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(
+              color: const Color(0xFF6074F9).withOpacity(0.2),
+            ),
+          ),
+          child: DropdownButton<String>(
+            value: _sortBy,
+            onChanged: (String? newValue) {
+              if (newValue != null) {
+                setState(() {
+                  _sortBy = newValue;
+                  _sortBudgets();
+                });
+              }
+            },
+            items: const [
+              DropdownMenuItem(value: 'date', child: Text('Date')),
+              DropdownMenuItem(value: 'amount', child: Text('Montant')),
+              DropdownMenuItem(value: 'category', child: Text('Catégorie')),
+              DropdownMenuItem(value: 'nom', child: Text('Nom')),
+            ],
+            underline: Container(),
+          ),
+        ),
+        IconButton(
+          onPressed: () {
+            setState(() {
+              _sortAscending = !_sortAscending;
+              _sortBudgets();
+            });
+          },
+          icon: Icon(
+            _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+            color: const Color(0xFF6074F9),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBudgetListHeader(ResponsiveDimensions dimensions) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          'Liste des Budgets',
+          style: TextStyle(
+            fontSize: dimensions.titleFontSize,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: dimensions.padding * 0.75,
+            vertical: dimensions.padding * 0.375,
+          ),
+          decoration: BoxDecoration(
+            color: const Color(0xFF6074F9).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '${_filteredBudgets.length}',
+            style: TextStyle(
+              color: const Color(0xFF6074F9),
+              fontWeight: FontWeight.bold,
+              fontSize: dimensions.fontSize,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBudgetList(ResponsiveDimensions dimensions, ScreenType screenType) {
+  print("_buildBudgetList appelé - isLoading: $_isLoading, budgets: ${_filteredBudgets.length}");
+  
+  if (_isLoading) {
+    return const Center(
+      child: CircularProgressIndicator(
+        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6074F9)),
+      ),
+    );
+  }
+
+  if (_filteredBudgets.isEmpty) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.account_balance_wallet_outlined,
+            size: 64,
+            color: Colors.grey[400],
+          ),
+          SizedBox(height: dimensions.padding),
+          Text(
+            'Aucun budget BDA',
+            style: TextStyle(
+              fontSize: dimensions.titleFontSize,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          SizedBox(height: dimensions.padding * 0.5),
+          Text(
+            'Appuyez sur AJOUTER pour créer votre premier budget',
+            style: TextStyle(
+              fontSize: dimensions.fontSize * 0.9,
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+    if (screenType == ScreenType.desktop && _filteredBudgets.length > 1) {
+      return GridView.builder(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: dimensions.crossAxisCount,
+          childAspectRatio: 3.5,
+          crossAxisSpacing: dimensions.padding,
+          mainAxisSpacing: dimensions.padding,
+        ),
+        itemCount: _filteredBudgets.length,
+        itemBuilder: (context, index) {
+          return _buildBudgetItem(_filteredBudgets[index], dimensions);
+        },
+      );
+    }
+
+    return ListView.builder(
+      itemCount: _filteredBudgets.length,
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: dimensions.padding * 0.75),
+          child: _buildBudgetItem(_filteredBudgets[index], dimensions),
+        );
+      },
+    );
+  }
+
+  Widget _buildBudgetItem(Map<String, dynamic> budget, ResponsiveDimensions dimensions) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -763,10 +887,9 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
           borderRadius: BorderRadius.circular(16),
           onTap: () => _showBudgetDetails(budget),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(dimensions.cardPadding),
             child: Row(
               children: [
-                // Icon
                 Container(
                   width: 40,
                   height: 40,
@@ -780,50 +903,48 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
                     size: 20,
                   ),
                 ),
-                const SizedBox(width: 16),
-                // Content
+                SizedBox(width: dimensions.padding),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         budget['nom'] ?? 'Budget sans nom',
-                        style: const TextStyle(
-                          fontSize: 16,
+                        style: TextStyle(
+                          fontSize: dimensions.fontSize,
                           fontWeight: FontWeight.w500,
                           color: Colors.black87,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: dimensions.padding * 0.25),
                       Text(
                         'Montant: ${budget['amount']} FCFA',
-                        style: const TextStyle(
-                          fontSize: 14,
+                        style: TextStyle(
+                          fontSize: dimensions.fontSize * 0.875,
                           color: Colors.grey,
                         ),
                       ),
                       Text(
                         'Catégorie: ${budget['category'] ?? 'Non spécifiée'}',
-                        style: const TextStyle(
-                          fontSize: 12,
+                        style: TextStyle(
+                          fontSize: dimensions.fontSize * 0.75,
                           color: Colors.grey,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        'Date: ${_formatDate(budget['date'])}',
-                        style: const TextStyle(
-                          fontSize: 12,
+                        'Date: ${_formatDate(budget['date'] ?? 'Non spécifiée')}',
+                        style: TextStyle(
+                          fontSize: dimensions.fontSize * 0.75,
                           color: Colors.grey,
                         ),
                       ),
                     ],
                   ),
                 ),
-                // Actions
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -855,3 +976,5 @@ ${budget['justificatif'] != null && budget['justificatif'].isNotEmpty ? '- Justi
     super.dispose();
   }
 }
+
+

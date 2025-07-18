@@ -4,6 +4,7 @@ class SpendLine {
   final String description;
   final double budget;
   final String proof;
+  final String? category;
   final DateTime date;
 
   SpendLine({
@@ -12,6 +13,7 @@ class SpendLine {
     required this.description,
     required this.budget,
     required this.proof,
+    required this.category,
     required this.date,
   });
 
@@ -22,18 +24,20 @@ class SpendLine {
       'description': description,
       'budget': budget,
       'proof': proof,
-      'date': date.toIso8601String(),
+      'category': category,
+      'date': date.millisecondsSinceEpoch, // Stocker en tant qu'entier (millisecondes)
     };
   }
 
   factory SpendLine.fromMap(Map<String, dynamic> map) {
     return SpendLine(
-      id: map['id'],
-      name: map['name'],
-      description: map['description'],
-      budget: map['budget'],
-      proof: map['proof'],
-      date: DateTime.parse(map['date']),
+      id: map['id'] as int?,
+      name: map['name'] as String,
+      description: map['description'] as String,
+      budget: map['budget'] as double,
+      proof: map['proof'] as String,
+      category: map['category'] as String?,
+      date: DateTime.fromMillisecondsSinceEpoch(map['date'] as int), // Convertir depuis millisecondes
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MainDrawerWrapper extends StatefulWidget {
   final Widget child;
@@ -9,7 +10,7 @@ class MainDrawerWrapper extends StatefulWidget {
   State<MainDrawerWrapper> createState() => _MainDrawerWrapperState();
 }
 
-class _MainDrawerWrapperState extends State<MainDrawerWrapper> 
+class _MainDrawerWrapperState extends State<MainDrawerWrapper>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<Offset> _drawerSlide;
@@ -66,6 +67,17 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
     });
   }
 
+  Future<void> _logoutUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); // Efface les données sauvegardées
+
+    _toggleDrawer();
+
+    Future.delayed(const Duration(milliseconds: 300), () {
+      Navigator.of(context).pushReplacementNamed('/login');
+    });
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -80,7 +92,6 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
     return Scaffold(
       body: Stack(
         children: [
-          // Drawer Background
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -88,15 +99,11 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF6074F9),
-                  Color(0xFF5A6BF2),
-                ],
+                colors: [Color(0xFF6074F9), Color(0xFF5A6BF2)],
               ),
             ),
           ),
 
-          // Main content (slidable)
           AnimatedPositioned(
             duration: const Duration(milliseconds: 350),
             curve: Curves.easeInOutCubic,
@@ -108,10 +115,10 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
               duration: const Duration(milliseconds: 350),
               curve: Curves.easeInOutCubic,
               decoration: BoxDecoration(
-                borderRadius: _isDrawerOpen 
-                    ? BorderRadius.circular(20) 
+                borderRadius: _isDrawerOpen
+                    ? BorderRadius.circular(20)
                     : BorderRadius.zero,
-                boxShadow: _isDrawerOpen 
+                boxShadow: _isDrawerOpen
                     ? [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.3),
@@ -125,7 +132,6 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
               child: Stack(
                 children: [
                   widget.child,
-                  // Overlay cliquable quand le drawer est ouvert
                   if (_isDrawerOpen)
                     AnimatedBuilder(
                       animation: _overlayOpacity,
@@ -133,7 +139,8 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
                         return GestureDetector(
                           onTap: _toggleDrawer,
                           child: Container(
-                            color: Colors.black.withOpacity(_overlayOpacity.value),
+                            color:
+                                Colors.black.withOpacity(_overlayOpacity.value),
                           ),
                         );
                       },
@@ -143,7 +150,6 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
             ),
           ),
 
-          // Drawer menu
           SlideTransition(
             position: _drawerSlide,
             child: Container(
@@ -153,17 +159,13 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF6074F9),
-                    Color(0xFF5A6BF2),
-                  ],
+                  colors: [Color(0xFF6074F9), Color(0xFF5A6BF2)],
                 ),
               ),
               child: SafeArea(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header section
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 20, 24, 30),
                       child: Row(
@@ -205,27 +207,33 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
                         ],
                       ),
                     ),
-
-                    // Menu items
                     Expanded(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Column(
                           children: [
                             _drawerItem(Icons.home_rounded, "Home", '/home'),
-                            _drawerItem(Icons.account_balance_wallet_rounded, "Spend Line", '/spendline'),
-                            _drawerItem(Icons.description_rounded, "Spend Form", '/add'),
-                            _drawerItem(Icons.bar_chart_rounded, "Graphique", '/stats'),
-                            _drawerItem(Icons.history_rounded, "Historique", '/history'),
-                            _drawerItem(Icons.wallet_rounded, "Wallets", '/wallets'),
-                             _drawerItem(Icons.add_circle_outline_rounded, "verifyWallet", '/verifyWallet'),
-                            _drawerItem(Icons.person_rounded, "User Page", '/userpage'),
-                            _drawerItem(Icons.notifications_rounded, "Notification", '/notification'),
-                            _drawerItem(Icons.settings_rounded, "Settings", '/settings'),
+                            _drawerItem(Icons.account_balance_wallet_rounded,
+                                "Spend Line", '/spendline'),
+                            _drawerItem(Icons.bar_chart_rounded, "Graphique",
+                                '/stats'),
+                            _drawerItem(
+                                Icons.history_rounded, "Historique", '/history'),
+                            _drawerItem(
+                                Icons.wallet_rounded, "Wallets", '/wallets'),
+                            _drawerItem(Icons.add_circle_outline_rounded,
+                                "verifyWallet", '/verifyWallet'),
+                            _drawerItem(
+                                Icons.person_rounded, "User Page", '/userpage'),
+                            _drawerItem(Icons.notifications_rounded,
+                                "Notification", '/notification'),
+                            _drawerItem(
+                                Icons.settings_rounded, "Settings", '/settings'),
                             const SizedBox(height: 20),
                             const Divider(color: Colors.white24, thickness: 1),
                             const SizedBox(height: 10),
-                            _drawerItem(Icons.logout_rounded, "LogOut", '/logout', isLogout: true),
+                            _drawerItem(Icons.logout_rounded, "LogOut", '/logout',
+                                isLogout: true),
                           ],
                         ),
                       ),
@@ -236,7 +244,6 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
             ),
           ),
 
-          // Menu button
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             left: 16,
@@ -277,7 +284,8 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
     );
   }
 
-  Widget _drawerItem(IconData icon, String label, String route, {bool isLogout = false}) {
+  Widget _drawerItem(IconData icon, String label, String route,
+      {bool isLogout = false}) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
@@ -288,7 +296,13 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => _navigateTo(route),
+          onTap: () {
+            if (isLogout) {
+              _logoutUser();
+            } else {
+              _navigateTo(route);
+            }
+          },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
@@ -297,8 +311,8 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: isLogout 
-                        ? Colors.red.withOpacity(0.2) 
+                    color: isLogout
+                        ? Colors.red.withOpacity(0.2)
                         : Colors.white.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -321,8 +335,8 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
                 ),
                 Icon(
                   Icons.arrow_forward_ios_rounded,
-                  color: isLogout 
-                      ? Colors.red[300]!.withOpacity(0.6) 
+                  color: isLogout
+                      ? Colors.red[300]!.withOpacity(0.6)
                       : Colors.white.withOpacity(0.6),
                   size: 16,
                 ),

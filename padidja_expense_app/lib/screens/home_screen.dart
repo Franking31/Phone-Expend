@@ -4,7 +4,7 @@ import '../widgets/main_drawer_wrapper.dart';
 import '../services/wallet_database.dart';
 import '../services/spend_line_database.dart';
 import '../models/transaction.dart';
-import '../models/spend_line.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,7 +16,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _selectedType = 'all';
 
-  // Modified to include budget amounts in total balance
   Future<double> _getTotalBalance() async {
     final wallets = await WalletDatabase.instance.getWallets();
     final budgets = await WalletDatabase.instance.getAllBudgets();
@@ -25,7 +24,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return walletBalance + budgetAmount;
   }
 
-  // Modified to fetch budget additions or expenses based on type
   Future<List<Transaction>> _getFilteredTransactions() async {
     if (_selectedType == 'income') {
       final budgets = await WalletDatabase.instance.getAllBudgets();
@@ -90,7 +88,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Modified to calculate budget and expense totals
   Future<Map<String, double>> _calculateTotals() async {
     final budgets = await WalletDatabase.instance.getAllBudgets();
     final spendLines = await SpendLineDatabase.instance.getAll();
@@ -119,20 +116,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = const Color(0xFF6074F9);
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
 
     return MainDrawerWrapper(
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: theme.scaffoldBackgroundColor,
         body: FutureBuilder<double>(
           future: _getTotalBalance(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) return const CircularProgressIndicator();
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
             double total = snapshot.data ?? 0.0;
             return FutureBuilder<List<Transaction>>(
               future: _getFilteredTransactions(),
               builder: (context, txSnapshot) {
-                if (!txSnapshot.hasData) return const CircularProgressIndicator();
+                if (!txSnapshot.hasData) return const Center(child: CircularProgressIndicator());
                 final transactions = txSnapshot.data ?? [];
                 return Column(
                   children: [
@@ -159,18 +157,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               Text(
                                 '${total.toStringAsFixed(2)} FCFA',
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: theme.colorScheme.onPrimary,
                                   fontSize: 36,
                                   fontWeight: FontWeight.w300,
                                   letterSpacing: 1.2,
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              const Text(
+                              Text(
                                 "Solde total",
                                 style: TextStyle(
-                                  color: Colors.white70,
+                                  color: theme.colorScheme.onPrimary.withOpacity(0.7),
                                   fontSize: 16,
                                   fontWeight: FontWeight.w300,
                                 ),
@@ -247,14 +245,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _typeButton(String label, bool selected) {
+    final theme = Theme.of(context);
     return GestureDetector(
       onTap: () => _setTransactionType(label == 'Budget' ? 'income' : 'outcome'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.transparent,
+          color: selected ? theme.colorScheme.surface : Colors.transparent,
           borderRadius: BorderRadius.circular(25),
-          border: Border.all(color: Colors.white, width: 1.5),
+          border: Border.all(color: theme.colorScheme.onPrimary, width: 1.5),
           boxShadow: selected
               ? [
                   BoxShadow(
@@ -268,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? const Color(0xFF6074F9) : Colors.white,
+            color: selected ? theme.colorScheme.primary : theme.colorScheme.onPrimary,
             fontWeight: FontWeight.w500,
             fontSize: 15,
           ),
@@ -278,10 +277,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _savingsCard() {
+    final theme = Theme.of(context);
     return FutureBuilder<Map<String, double>>(
       future: _calculateTotals(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const CircularProgressIndicator();
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final totals = snapshot.data!;
         final remaining = totals['remaining']!;
         final variation = totals['variation']!;
@@ -294,9 +294,9 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Container(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: const Color(0xFFF8F4FF),
+              color: theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF6074F9).withOpacity(0.3), width: 1),
+              border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3), width: 1),
               boxShadow: [
                 BoxShadow(
                   color: Colors.grey.withOpacity(0.1),
@@ -309,12 +309,12 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   "Compte d'épargne",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
-                    color: Colors.black87,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 15),
@@ -324,7 +324,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text("Budget alloué", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                        Text("Budget alloué", style: TextStyle(color: Colors.grey, fontSize: 14)),
                         const SizedBox(height: 5),
                         Text("${totalBudget.toStringAsFixed(0)} FCFA", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 5),
@@ -337,7 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text("Dépenses", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                        Text("Dépenses", style: TextStyle(color: Colors.grey, fontSize: 14)),
                         const SizedBox(height: 5),
                         Text("${totalOutcome.toStringAsFixed(0)} FCFA", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 5),
@@ -356,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text("Solde", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                        Text("Solde", style: TextStyle(color: Colors.grey, fontSize: 14)),
                         const SizedBox(height: 5),
                         Text(
                           "${remaining.toStringAsFixed(0)} FCFA",
@@ -371,7 +371,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text("Taux", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                        Text("Taux", style: TextStyle(color: Colors.grey, fontSize: 14)),
                         const SizedBox(height: 5),
                         Text(
                           "${variation.abs().toStringAsFixed(1)}%",
@@ -422,14 +422,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _transactionCard(List<Transaction> transactions) {
+    final theme = Theme.of(context);
     final transaction = transactions.isNotEmpty ? transactions.first : null;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          color: const Color(0xFFF8F4FF),
-          border: Border.all(color: const Color(0xFF6074F9).withOpacity(0.3), width: 1),
+          color: theme.colorScheme.surface,
+          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3), width: 1),
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
             BoxShadow(
@@ -449,7 +450,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     transaction?.description ?? "Aucun mouvement",
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: theme.colorScheme.onSurface),
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 6),
@@ -457,7 +458,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     transaction != null
                         ? '${transaction.date.day}/${transaction.date.month}/${transaction.date.year}'
                         : "N/A",
-                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                 ],
               ),
