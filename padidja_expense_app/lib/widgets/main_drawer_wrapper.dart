@@ -221,8 +221,6 @@ class _MainDrawerWrapperState extends State<MainDrawerWrapper>
                                 Icons.history_rounded, "Historique", '/history'),
                             _drawerItem(
                                 Icons.wallet_rounded, "Wallets", '/wallets'),
-                            _drawerItem(Icons.add_circle_outline_rounded,
-                                "verifyWallet", '/verifyWallet'),
                             _drawerItem(
                                 Icons.person_rounded, "User Page", '/userpage'),
                             _drawerItem(Icons.notifications_rounded,

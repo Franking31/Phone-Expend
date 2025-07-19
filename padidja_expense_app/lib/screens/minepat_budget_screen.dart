@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:padidja_expense_app/screens/budget_list_detail.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 import '../models/screen_type.dart';
 import '../services/wallet_database.dart';
@@ -785,8 +786,11 @@ ${budget['justificatif'] != null && budget['justificatif'].toString().isNotEmpty
     );
   }
 
-  Widget _buildBudgetItem(Map<String, dynamic> budget, ResponsiveDimensions dimensions) {
-    return Container(
+ 
+Widget _buildBudgetItem(Map<String, dynamic> budget, ResponsiveDimensions dimensions) {
+  return Hero(
+    tag: 'budget_${budget['id']}', // Tag pour l'animation Hero
+    child: Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -807,7 +811,20 @@ ${budget['justificatif'] != null && budget['justificatif'].toString().isNotEmpty
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => _showBudgetDetails(budget),
+          onTap: () {
+            // Navigation vers la page de détail
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => BudgetDetailPage(
+                  budget: budget,
+                  sourceTitle: 'MINEPAT',
+                  primaryColor: const Color(0xFF6074F9),
+                  heroTag: 'budget_${budget['id']}',
+                ),
+              ),
+            );
+          },
           child: Padding(
             padding: EdgeInsets.all(dimensions.cardPadding),
             child: Row(
@@ -862,19 +879,101 @@ ${budget['justificatif'] != null && budget['justificatif'].toString().isNotEmpty
                           color: Colors.grey,
                         ),
                       ),
+                      // Indicateur visuel pour montrer que c'est cliquable
+                      SizedBox(height: dimensions.padding * 0.25),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.touch_app,
+                            size: 12,
+                            color: const Color(0xFF6074F9).withOpacity(0.6),
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Toucher pour voir les détails',
+                            style: TextStyle(
+                              fontSize: dimensions.fontSize * 0.7,
+                              color: const Color(0xFF6074F9).withOpacity(0.6),
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit, color: Color(0xFF6074F9)),
-                      onPressed: () => _editBudget(budget['id'] as int),
+                // Menu d'actions rapides
+                PopupMenuButton<String>(
+                  onSelected: (String action) {
+                    switch (action) {
+                      case 'edit':
+                        _editBudget(budget['id'] as int);
+                        break;
+                      case 'delete':
+                        _deleteBudget(budget['id'] as int);
+                        break;
+                      case 'share':
+                        _shareBudget(budget);
+                        break;
+                      case 'details':
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => BudgetDetailPage(
+                              budget: budget,
+                              sourceTitle: 'MINEPAT',
+                              primaryColor: const Color(0xFF6074F9),
+                              heroTag: 'budget_${budget['id']}',
+                            ),
+                          ),
+                        );
+                        break;
+                    }
+                  },
+                  icon: const Icon(
+                    Icons.more_vert,
+                    color: Color(0xFF6074F9),
+                  ),
+                  itemBuilder: (BuildContext context) => [
+                    const PopupMenuItem<String>(
+                      value: 'details',
+                      child: Row(
+                        children: [
+                          Icon(Icons.visibility, color: Color(0xFF6074F9)),
+                          SizedBox(width: 8),
+                          Text('Voir détails'),
+                        ],
+                      ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _deleteBudget(budget['id'] as int),
+                    const PopupMenuItem<String>(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, color: Color(0xFF6074F9)),
+                          SizedBox(width: 8),
+                          Text('Modifier'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'share',
+                      child: Row(
+                        children: [
+                          Icon(Icons.share, color: Color(0xFF6074F9)),
+                          SizedBox(width: 8),
+                          Text('Partager'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Supprimer'),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -883,8 +982,9 @@ ${budget['justificatif'] != null && budget['justificatif'].toString().isNotEmpty
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   @override
   void dispose() {
