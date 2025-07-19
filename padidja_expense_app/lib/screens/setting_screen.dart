@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:padidja_expense_app/providers/theme_provider.dart';
+import 'package:padidja_expense_app/screens/user_profil_page.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
+import '../models/user_model.dart';
+import 'dart:io';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  final Utilisateur utilisateur;
+
+  const SettingsPage({super.key, required this.utilisateur});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -11,28 +18,29 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage>
     with TickerProviderStateMixin {
   bool _pushNotifications = true;
-  bool _darkMode = false;
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  late Utilisateur _currentUser;
 
   @override
   void initState() {
     super.initState();
-    
+    _currentUser = widget.utilisateur;
+
     // Animation pour le fade-in du contenu
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-    
+
     // Animation pour le slide-up du contenu
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    
+
     _fadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
@@ -40,7 +48,7 @@ class _SettingsPageState extends State<SettingsPage>
       parent: _fadeController,
       curve: Curves.easeInOut,
     ));
-    
+
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.3),
       end: Offset.zero,
@@ -48,7 +56,7 @@ class _SettingsPageState extends State<SettingsPage>
       parent: _slideController,
       curve: Curves.easeOutCubic,
     ));
-    
+
     // Démarrer les animations
     _fadeController.forward();
     _slideController.forward();
@@ -61,16 +69,38 @@ class _SettingsPageState extends State<SettingsPage>
     super.dispose();
   }
 
+  // Method to navigate to EditProfilePage and handle the returned user
+  Future<void> _navigateToEditProfile() async {
+    final updatedUser = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditProfilePage(utilisateur: _currentUser),
+      ),
+    );
+
+    // Update the current user if the EditProfilePage returns an updated user
+    if (updatedUser != null && updatedUser is Utilisateur) {
+      setState(() {
+        _currentUser = updatedUser;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.isDarkMode;
+
     return MainDrawerWrapper(
       child: Scaffold(
         body: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF6074F9), Color(0xFF5A6BF2)],
+              colors: isDarkMode
+                  ? [const Color(0xFF2E2E2E), const Color(0xFF1E1E1E)]
+                  : [const Color(0xFF6074F9), const Color(0xFF5A6BF2)],
             ),
           ),
           child: SafeArea(
@@ -83,9 +113,7 @@ class _SettingsPageState extends State<SettingsPage>
                     padding: const EdgeInsets.all(20.0),
                     child: Row(
                       children: [
-                        const SizedBox(
-                          width: 56,
-                        ),
+                        const SizedBox(width: 56),
                         TweenAnimationBuilder<double>(
                           tween: Tween(begin: 0.0, end: 1.0),
                           duration: const Duration(milliseconds: 800),
@@ -94,7 +122,7 @@ class _SettingsPageState extends State<SettingsPage>
                               angle: value * 0.5,
                               child: Icon(
                                 Icons.settings_rounded,
-                                color: Colors.white.withOpacity(value),
+                                color: Colors.white.withValues(alpha: value),
                                 size: 28,
                               ),
                             );
@@ -122,9 +150,9 @@ class _SettingsPageState extends State<SettingsPage>
                       opacity: _fadeAnimation,
                       child: Container(
                         margin: const EdgeInsets.only(top: 20),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.only(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          borderRadius: const BorderRadius.only(
                             topLeft: Radius.circular(30),
                             topRight: Radius.circular(30),
                           ),
@@ -145,7 +173,7 @@ class _SettingsPageState extends State<SettingsPage>
                                         offset: Offset(0, 20 * (1 - value)),
                                         child: Opacity(
                                           opacity: value,
-                                          child: _buildProfileSection(),
+                                          child: _buildProfileSection(isDarkMode),
                                         ),
                                       );
                                     },
@@ -160,9 +188,10 @@ class _SettingsPageState extends State<SettingsPage>
                                       _buildAnimatedSettingsItem(
                                         icon: Icons.person_outline_rounded,
                                         title: 'Edit profile',
-                                        onTap: () {},
+                                        onTap: _navigateToEditProfile,
                                         showArrow: true,
                                         delay: 200,
+                                        isDarkMode: isDarkMode,
                                       ),
                                       _buildAnimatedSettingsItem(
                                         icon: Icons.lock_outline_rounded,
@@ -170,6 +199,7 @@ class _SettingsPageState extends State<SettingsPage>
                                         onTap: () {},
                                         showArrow: true,
                                         delay: 300,
+                                        isDarkMode: isDarkMode,
                                       ),
                                       _buildAnimatedSettingsItem(
                                         icon: Icons.notifications_outlined,
@@ -187,33 +217,36 @@ class _SettingsPageState extends State<SettingsPage>
                                             },
                                             activeColor: const Color(0xFF6074F9),
                                             activeTrackColor: const Color(0xFF6074F9)
-                                                .withOpacity(0.3),
+                                                .withValues(alpha: 0.3),
                                           ),
                                         ),
                                         delay: 400,
+                                        isDarkMode: isDarkMode,
                                       ),
                                       _buildAnimatedSettingsItem(
-                                        icon: Icons.dark_mode_outlined,
+                                        icon: isDarkMode
+                                            ? Icons.light_mode_outlined
+                                            : Icons.dark_mode_outlined,
                                         title: 'Dark mode',
                                         onTap: () {},
                                         trailing: AnimatedSwitcher(
                                           duration: const Duration(milliseconds: 300),
                                           child: Switch(
-                                            key: ValueKey(_darkMode),
-                                            value: _darkMode,
+                                            key: ValueKey(isDarkMode),
+                                            value: isDarkMode,
                                             onChanged: (value) {
-                                              setState(() {
-                                                _darkMode = value;
-                                              });
+                                              themeProvider.toggleTheme();
                                             },
                                             activeColor: const Color(0xFF6074F9),
                                             activeTrackColor: const Color(0xFF6074F9)
-                                                .withOpacity(0.3),
+                                                .withValues(alpha: 0.3),
                                           ),
                                         ),
                                         delay: 500,
+                                        isDarkMode: isDarkMode,
                                       ),
                                     ],
+                                    isDarkMode: isDarkMode,
                                   ),
 
                                   const SizedBox(height: 30),
@@ -228,6 +261,7 @@ class _SettingsPageState extends State<SettingsPage>
                                         onTap: () {},
                                         showArrow: true,
                                         delay: 600,
+                                        isDarkMode: isDarkMode,
                                       ),
                                       _buildAnimatedSettingsItem(
                                         icon: Icons.privacy_tip_outlined,
@@ -235,8 +269,10 @@ class _SettingsPageState extends State<SettingsPage>
                                         onTap: () {},
                                         showArrow: true,
                                         delay: 700,
+                                        isDarkMode: isDarkMode,
                                       ),
                                     ],
+                                    isDarkMode: isDarkMode,
                                   ),
 
                                   const SizedBox(height: 20),
@@ -257,19 +293,21 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  Widget _buildProfileSection() {
+  Widget _buildProfileSection(bool isDarkMode) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: isDarkMode ? const Color(0xFF2E2E2E) : Colors.grey[50],
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.grey[200]!,
+          color: isDarkMode ? const Color(0xFF404040) : Colors.grey[200]!,
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: isDarkMode
+                ? Colors.black.withValues(alpha: 0.3)
+                : Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -292,38 +330,47 @@ class _SettingsPageState extends State<SettingsPage>
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6074F9).withOpacity(0.3),
+                    color: Color(0xFF6074F9).withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              child: const Icon(
-                Icons.person,
-                color: Colors.white,
-                size: 30,
-              ),
+              child: _currentUser.imagePath != null &&
+                      File(_currentUser.imagePath!).existsSync()
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(30),
+                      child: Image.file(
+                        File(_currentUser.imagePath!),
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.person,
+                      color: Colors.white,
+                      size: 30,
+                    ),
             ),
           ),
           const SizedBox(width: 16),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Yennefer Doe',
+                  _currentUser.nom,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: isDarkMode ? Colors.white : Colors.black87,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'yennefer.doe@email.com',
+                  _currentUser.email,
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey,
+                    color: isDarkMode ? Colors.grey[400] : Colors.grey,
                   ),
                 ),
               ],
@@ -334,7 +381,7 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  Widget _buildAnimatedSection(String title, List<Widget> items) {
+  Widget _buildAnimatedSection(String title, List<Widget> items, {bool isDarkMode = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -344,7 +391,7 @@ class _SettingsPageState extends State<SettingsPage>
           builder: (context, value, child) {
             return Opacity(
               opacity: value,
-              child: _buildSectionTitle(title),
+              child: _buildSectionTitle(title, isDarkMode),
             );
           },
         ),
@@ -361,6 +408,7 @@ class _SettingsPageState extends State<SettingsPage>
     bool showArrow = false,
     Widget? trailing,
     int delay = 0,
+    bool isDarkMode = false,
   }) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -377,6 +425,7 @@ class _SettingsPageState extends State<SettingsPage>
               onTap: onTap,
               showArrow: showArrow,
               trailing: trailing,
+              isDarkMode: isDarkMode,
             ),
           ),
         );
@@ -384,13 +433,13 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(String title, bool isDarkMode) {
     return Text(
       title,
       style: TextStyle(
         fontSize: 16,
         fontWeight: FontWeight.w600,
-        color: Colors.grey[600],
+        color: isDarkMode ? Colors.grey[300] : Colors.grey[600],
       ),
     );
   }
@@ -401,6 +450,7 @@ class _SettingsPageState extends State<SettingsPage>
     required VoidCallback onTap,
     bool showArrow = false,
     Widget? trailing,
+    bool isDarkMode = false,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -409,17 +459,23 @@ class _SettingsPageState extends State<SettingsPage>
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
-          splashColor: const Color(0xFF6074F9).withOpacity(0.1),
-          highlightColor: const Color(0xFF6074F9).withOpacity(0.05),
+          splashColor: const Color(0xFF6074F9).withValues(alpha: 0.1),
+          highlightColor: const Color(0xFF6074F9).withValues(alpha: 0.05),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             decoration: BoxDecoration(
+              color: isDarkMode ? const Color(0xFF2E2E2E) : Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey[200]!, width: 1),
+              border: Border.all(
+                color: isDarkMode ? const Color(0xFF404040) : Colors.grey[200]!,
+                width: 1,
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
+                  color: isDarkMode
+                      ? Colors.black.withValues(alpha: 0.1)
+                      : Colors.black.withValues(alpha: 0.02),
                   blurRadius: 4,
                   offset: const Offset(0, 1),
                 ),
@@ -432,7 +488,7 @@ class _SettingsPageState extends State<SettingsPage>
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6074F9).withOpacity(0.1),
+                    color: const Color(0xFF6074F9).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: TweenAnimationBuilder<double>(
@@ -454,10 +510,10 @@ class _SettingsPageState extends State<SettingsPage>
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
-                      color: Colors.black87,
+                      color: isDarkMode ? Colors.white : Colors.black87,
                     ),
                   ),
                 ),
@@ -473,7 +529,7 @@ class _SettingsPageState extends State<SettingsPage>
                           opacity: value,
                           child: Icon(
                             Icons.arrow_forward_ios_rounded,
-                            color: Colors.grey[400],
+                            color: isDarkMode ? Colors.grey[500] : Colors.grey[400],
                             size: 16,
                           ),
                         ),

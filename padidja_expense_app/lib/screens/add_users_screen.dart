@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
+import 'package:padidja_expense_app/widgets/notification_button.dart';
 
 
 class UserFormPage extends StatefulWidget {
@@ -23,14 +24,14 @@ class _UserFormPageState extends State<UserFormPage> {
         backgroundColor: Colors.grey[100],
         body: Column(
           children: [
-            // Header avec courbe bleue
+            // Header avec courbe
             Container(
               height: 200,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
+                  colors: [Color(0xFF6074F9), Color(0xFF6074F9)],
                 ),
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(50),
@@ -39,12 +40,53 @@ class _UserFormPageState extends State<UserFormPage> {
               ),
               child: SafeArea(
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
                     children: [
-                      // Notification bell
-                      Icon(Icons.notifications, color: Colors.white, size: 28),
+                      // Barre de navigation
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          buildNotificationAction(context), // Remplacement par buildNotificationAction
+                        ],
+                      ),
+
+                      const SizedBox(height: 30),
+
+                      // Titre
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.arrow_back,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          const Text(
+                            'Add User',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -53,187 +95,153 @@ class _UserFormPageState extends State<UserFormPage> {
 
             // Contenu du formulaire
             Expanded(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Bouton retour et titre
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            padding: EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.withOpacity(0.1),
-                                  spreadRadius: 1,
-                                  blurRadius: 3,
-                                  offset: Offset(0, 1),
-                                ),
-                              ],
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Formulaire
+                      Form(
+                        key: _formKey,
+                        child: Column(
+                          children: [
+                            // Champ Username
+                            _buildTextField(
+                              controller: _usernameController,
+                              hintText: 'Username',
                             ),
-                            child: Icon(
-                              Icons.arrow_back,
-                              color: Colors.black,
-                              size: 24,
+
+                            const SizedBox(height: 20),
+
+                            // Champ Email
+                            _buildTextField(
+                              controller: _emailController,
+                              hintText: 'Email',
                             ),
-                          ),
-                        ),
-                        SizedBox(width: 20),
-                        Text(
-                          'Add User',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ],
-                    ),
 
-                    SizedBox(height: 30),
+                            const SizedBox(height: 20),
 
-                    // Formulaire
-                    Form(
-                      key: _formKey,
-                      child: Column(
-                        children: [
-                          // Champ Username
-                          _buildTextField(
-                            controller: _usernameController,
-                            hintText: 'Username',
-                          ),
-
-                          SizedBox(height: 20),
-
-                          // Champ Email
-                          _buildTextField(
-                            controller: _emailController,
-                            hintText: 'Email',
-                          ),
-
-                          SizedBox(height: 20),
-
-                          // Dropdown Role
-                          Container(
-                            width: double.infinity,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(30),
-                              border: Border.all(
-                                color: Color(0xFF4A90E2),
-                                width: 1,
+                            // Dropdown Role
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 5,
                               ),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _selectedRole,
-                                hint: Text(
-                                  'Role',
-                                  style: TextStyle(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFF6074F9).withOpacity(0.2),
+                                  width: 1,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.grey.withOpacity(0.08),
+                                    spreadRadius: 1,
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: _selectedRole,
+                                  hint: Text(
+                                    'Role',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  items: ['Role', 'Admin', 'User', 'Manager']
+                                      .map((String value) {
+                                    return DropdownMenuItem<String>(
+                                      value: value,
+                                      child: Text(
+                                        value,
+                                        style: TextStyle(
+                                          color: value == 'Role'
+                                              ? Colors.grey[600]
+                                              : Colors.black,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (String? newValue) {
+                                    setState(() {
+                                      _selectedRole = newValue!;
+                                    });
+                                  },
+                                  icon: Icon(
+                                    Icons.keyboard_arrow_down,
                                     color: Colors.grey[600],
-                                    fontSize: 16,
                                   ),
                                 ),
-                                items:
-                                    ['Role', 'Admin', 'User', 'Manager'].map((
-                                      String value,
-                                    ) {
-                                      return DropdownMenuItem<String>(
-                                        value: value,
-                                        child: Text(
-                                          value,
-                                          style: TextStyle(
-                                            color:
-                                                value == 'Role'
-                                                    ? Colors.grey[600]
-                                                    : Colors.black,
-                                            fontSize: 16,
-                                          ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Champ Password
+                            _buildTextField(
+                              controller: _passwordController,
+                              hintText: 'Password',
+                              isPassword: true,
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Champ Confirm Password
+                            _buildTextField(
+                              controller: _confirmPasswordController,
+                              hintText: 'Confirm Password',
+                              isPassword: true,
+                            ),
+
+                            const SizedBox(height: 40),
+
+                            // Bouton ADD
+                            SizedBox(
+                              width: 120,
+                              height: 45,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  if (_formKey.currentState!.validate()) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Utilisateur ajouté avec succès!',
                                         ),
-                                      );
-                                    }).toList(),
-                                onChanged: (String? newValue) {
-                                  setState(() {
-                                    _selectedRole = newValue!;
-                                  });
-                                },
-                                icon: Icon(
-                                  Icons.keyboard_arrow_down,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          SizedBox(height: 20),
-
-                          // Champ Password
-                          _buildTextField(
-                            controller: _passwordController,
-                            hintText: 'Password',
-                            isPassword: true,
-                          ),
-
-                          SizedBox(height: 20),
-
-                          // Champ Confirm Password
-                          _buildTextField(
-                            controller: _confirmPasswordController,
-                            hintText: 'Confirm Password',
-                            isPassword: true,
-                          ),
-
-                          SizedBox(height: 40),
-
-                          // Bouton ADD
-                          Container(
-                            width: 120,
-                            height: 50,
-                            child: ElevatedButton(
-                              onPressed: () {
-                                // Logique d'ajout d'utilisateur
-                                if (_formKey.currentState!.validate()) {
-                                  // Traitement du formulaire
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Utilisateur ajouté avec succès!',
                                       ),
-                                    ),
-                                  );
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Color(0xFF4A90E2),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(25),
+                                    );
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF6074F9),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(25),
+                                  ),
+                                  elevation: 3,
                                 ),
-                                elevation: 3,
-                              ),
-                              child: Text(
-                                'ADD',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                                child: const Text(
+                                  'ADD',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -251,8 +259,19 @@ class _UserFormPageState extends State<UserFormPage> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Color(0xFF4A90E2), width: 1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF6074F9).withOpacity(0.2),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.08),
+            spreadRadius: 1,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: TextFormField(
         controller: controller,
@@ -261,7 +280,7 @@ class _UserFormPageState extends State<UserFormPage> {
           hintText: hintText,
           hintStyle: TextStyle(color: Colors.grey[600], fontSize: 16),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
         ),
         validator: (value) {
           if (value == null || value.isEmpty) {
