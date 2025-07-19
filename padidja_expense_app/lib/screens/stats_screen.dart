@@ -136,10 +136,9 @@ class _StatsScreenState extends State<StatsScreen> {
     final filteredBudgets = _getFilteredBudgets();
     final Map<String, double> totals = {'budgetAllocated': 0.0, 'cost': 0.0, 'budgetSpent': 0.0};
 
-    // Ajouter les budgets alloués et dépensés
+    // Ajouter les budgets alloués
     for (var budget in filteredBudgets) {
       totals['budgetAllocated'] = totals['budgetAllocated']! + (budget['amount'] ?? 0.0);
-      totals['budgetSpent'] = totals['budgetSpent']! + (budget['spent'] ?? 0.0);
     }
 
     // Ajouter les coûts des lignes de dépenses
@@ -147,8 +146,8 @@ class _StatsScreenState extends State<StatsScreen> {
       totals['cost'] = totals['cost']! + spend.budget;
     }
 
-    // Calculer l'économie : budget alloué - (dépenses + budget dépensé)
-    totals['save'] = totals['budgetAllocated']! - (totals['cost']! + totals['budgetSpent']!);
+    // Calculer l'économie : budget alloué - dépenses
+    totals['save'] = totals['budgetAllocated']! - totals['cost']!;
     return totals;
   }
 
@@ -161,7 +160,6 @@ class _StatsScreenState extends State<StatsScreen> {
     for (int i = 0; i < labels.length; i++) {
       double budgetAllocated = 0.0;
       double cost = 0.0;
-      double budgetSpent = 0.0;
       
       // Ajouter les données des budgets
       for (var budgetData in filteredBudgets) {
@@ -190,7 +188,6 @@ class _StatsScreenState extends State<StatsScreen> {
         
         if (include) {
           budgetAllocated += budgetData['amount'] ?? 0.0;
-          budgetSpent += budgetData['spent'] ?? 0.0; // Correction ici avec ?? 0.0
         }
       }
       
@@ -233,7 +230,7 @@ class _StatsScreenState extends State<StatsScreen> {
             borderRadius: BorderRadius.circular(4),
           ),
           BarChartRodData(
-            toY: cost + budgetSpent, 
+            toY: cost, 
             color: Colors.red.shade300, 
             width: _getBarWidth(),
             borderRadius: BorderRadius.circular(4),
@@ -282,73 +279,73 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   List<PieChartSectionData> _buildPieChartData() {
-  final totals = _calculateTotals();
-  final totalAmount = totals['budgetAllocated']! + totals['cost']!;
+    final totals = _calculateTotals();
+    final totalAmount = totals['budgetAllocated']! + totals['cost']!;
 
-  if (totalAmount == 0) {
-    return [
-      PieChartSectionData(
-        color: Colors.grey.shade300,
-        value: 1,
-        title: 'Aucune donnée',
-        radius: 80,
-        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-      ),
-    ];
-  }
-
-  List<PieChartSectionData> sections = [];
-  
-  if (totals['budgetAllocated']! > 0) {
-    sections.add(PieChartSectionData(
-      color: Colors.orange,
-      value: totals['budgetAllocated'],
-      title: 'Budget alloué\n${totals['budgetAllocated']!.toStringAsFixed(0)} FCFA',
-      radius: 80,
-      titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-    ));
-  }
-  
-  if (totals['cost']! > 0) {
-    sections.add(PieChartSectionData(
-      color: Colors.red.shade300,
-      value: totals['cost']! + totals['budgetSpent']!, // Fixed: Added null check for cost
-      title: 'Dépenses\n${(totals['cost']! + totals['budgetSpent']!).toStringAsFixed(0)} FCFA',
-      radius: 80,
-      titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-    ));
-  }
-  
-  if (totals['save']! > 0) {
-    sections.add(PieChartSectionData(
-      color: Colors.green,
-      value: totals['save'],
-      title: 'Économie\n${totals['save']!.toStringAsFixed(0)} FCFA',
-      radius: 80,
-      titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-    ));
-  }
-
-  return sections;
-}
-
-double _getMaxYValue() {
-  final totals = _calculateTotals();
-  final maxValue = [totals['budgetAllocated']!, totals['cost']! + totals['budgetSpent']!].reduce((a, b) => a > b ? a : b);
-  return maxValue > 0 ? maxValue * 1.2 : 100;
-}
-
-void _changeWeek(int delta) {
-  setState(() {
-    if (selectedPeriod == 'Weekly') {
-      selectedWeekOffset += delta;
-    } else if (selectedPeriod == 'Monthly') {
-      final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
-      final maxWeeks = (daysInMonth / 7).ceil();
-      selectedWeek = (selectedWeek + delta).clamp(1, maxWeeks);
+    if (totalAmount == 0) {
+      return [
+        PieChartSectionData(
+          color: Colors.grey.shade300,
+          value: 1,
+          title: 'Aucune donnée',
+          radius: 80,
+          titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+      ];
     }
-  });
-}
+
+    List<PieChartSectionData> sections = [];
+    
+    if (totals['budgetAllocated']! > 0) {
+      sections.add(PieChartSectionData(
+        color: Colors.orange,
+        value: totals['budgetAllocated'],
+        title: 'Budget alloué\n${totals['budgetAllocated']!.toStringAsFixed(0)} FCFA',
+        radius: 80,
+        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+      ));
+    }
+    
+    if (totals['cost']! > 0) {
+      sections.add(PieChartSectionData(
+        color: Colors.red.shade300,
+        value: totals['cost']!,
+        title: 'Dépenses\n${totals['cost']!.toStringAsFixed(0)} FCFA',
+        radius: 80,
+        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+      ));
+    }
+    
+    if (totals['save']! > 0) {
+      sections.add(PieChartSectionData(
+        color: Colors.green,
+        value: totals['save'],
+        title: 'Économie\n${totals['save']!.toStringAsFixed(0)} FCFA',
+        radius: 80,
+        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+      ));
+    }
+
+    return sections;
+  }
+
+  double _getMaxYValue() {
+    final totals = _calculateTotals();
+    final maxValue = [totals['budgetAllocated']!, totals['cost']!].reduce((a, b) => a > b ? a : b);
+    return maxValue > 0 ? maxValue * 1.2 : 100;
+  }
+
+  void _changeWeek(int delta) {
+    setState(() {
+      if (selectedPeriod == 'Weekly') {
+        selectedWeekOffset += delta;
+      } else if (selectedPeriod == 'Monthly') {
+        final daysInMonth = DateTime(selectedYear, selectedMonth + 1, 0).day;
+        final maxWeeks = (daysInMonth / 7).ceil();
+        selectedWeek = (selectedWeek + delta).clamp(1, maxWeeks);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -550,11 +547,10 @@ void _changeWeek(int delta) {
                                     ),
                                   ),
                                   const SizedBox(height: 16),
-                                  _detailItem("Budget alloué", "${totals['budgetAllocated']!.toStringAsFixed(0)} FCFA", Icons.account_balance_wallet),
-                                  _detailItem("Dépenses", "${totals['cost']!.toStringAsFixed(0)} FCFA", Icons.trending_down),
-                                  _detailItem("Budget dépensé", "${totals['budgetSpent']!.toStringAsFixed(0)} FCFA", Icons.money_off),
+                                  _buildDetailItem("Budget alloué", "${totals['budgetAllocated']!.toStringAsFixed(0)} FCFA", Icons.account_balance_wallet),
+                                  _buildDetailItem("Dépenses", "${totals['cost']!.toStringAsFixed(0)} FCFA", Icons.trending_down),
                                   const Divider(color: Colors.white54, height: 20),
-                                  _detailItem("Économie", "${totals['save']!.toStringAsFixed(0)} FCFA", Icons.savings, isTotal: true),
+                                  _buildDetailItem("Économie", "${totals['save']!.toStringAsFixed(0)} FCFA", Icons.savings, isTotal: true),
                                 ],
                               ),
                             ),
@@ -630,6 +626,7 @@ void _changeWeek(int delta) {
 
   List<Widget> _buildBudgetCategoryList() {
     final filteredBudgets = _getFilteredBudgets();
+    final filteredSpends = _getFilteredSpendLines();
     final Map<String, Map<String, double>> categoryTotals = {};
     
     // Grouper les budgets par catégorie
@@ -640,15 +637,23 @@ void _changeWeek(int delta) {
       }
       categoryTotals[category]!['allocated'] = 
           (categoryTotals[category]!['allocated'] ?? 0.0) + (budget['amount'] ?? 0.0);
+    }
+    
+    // Ajouter les dépenses des SpendLine par catégorie
+    for (var spend in filteredSpends) {
+      final category = spend.category ?? 'Non catégorisé';
+      if (!categoryTotals.containsKey(category)) {
+        categoryTotals[category] = {'allocated': 0.0, 'spent': 0.0};
+      }
       categoryTotals[category]!['spent'] = 
-          (categoryTotals[category]!['spent'] ?? 0.0) + (budget['spent'] ?? 0.0);
+          (categoryTotals[category]!['spent'] ?? 0.0) + spend.budget;
     }
     
     if (categoryTotals.isEmpty) {
       return [
         const Center(
           child: Text(
-            'Aucun budget pour cette période',
+            'Aucun budget ou dépense pour cette période',
             style: TextStyle(
               fontSize: 16,
               color: Colors.grey,
@@ -921,7 +926,7 @@ void _changeWeek(int delta) {
     );
   }
 
-  Widget _detailItem(String label, String value, IconData icon, {bool isTotal = false}) {
+  Widget _buildDetailItem(String label, String value, IconData icon, {bool isTotal = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(

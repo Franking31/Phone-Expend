@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'package:padidja_expense_app/models/spend_line.dart';
 import 'package:padidja_expense_app/services/spend_line_database.dart';
+import 'package:padidja_expense_app/services/wallet_database.dart'; // Ajout de l'import pour WalletDatabase
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 
@@ -28,14 +29,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   
   // Catégories prédéfinies
   final List<String> _predefinedCategories = [
-    'Alimentation',
-    'Transport',
-    'Logement',
-    'Santé',
-    'Loisirs',
-    'Vêtements',
-    'Éducation',
-    'Services',
     'Autre'
   ];
 
@@ -47,11 +40,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   Future<void> _loadExistingCategories() async {
     try {
-      final existingCategories = await SpendLineDatabase.instance.getAllCategories();
+      final db = await WalletDatabase.instance.database;
+      final result = await db.query('budgets', columns: ['category'], distinct: true);
       setState(() {
         // Ajouter les catégories existantes qui ne sont pas déjà dans la liste prédéfinie
-        for (String category in existingCategories) {
-          if (!_predefinedCategories.contains(category)) {
+        for (var row in result) {
+          final category = row['category'] as String?;
+          if (category != null && category.isNotEmpty && !_predefinedCategories.contains(category)) {
             _predefinedCategories.add(category);
           }
         }

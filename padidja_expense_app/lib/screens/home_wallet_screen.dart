@@ -7,6 +7,7 @@ import '../models/wallet.dart';
 import '../models/transaction.dart';
 import '../services/wallet_database.dart';
 import 'add_transaction_screen.dart';
+import 'dart:async'; // Added for Timer
 
 class WalletHomeScreen extends StatefulWidget {
   const WalletHomeScreen({super.key});
@@ -23,6 +24,7 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
   bool _isLoading = false;
   double _globalWalletLimit = 1000000.0;
   double _totalBudgetAmount = 0.0;
+  Timer? _refreshTimer; // Added for periodic refresh
 
   @override
   void initState() {
@@ -30,6 +32,19 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
     _loadData();
     _loadGlobalWalletLimit();
     _loadBudgets();
+    // Initialize timer for auto-refresh every 30 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _loadData();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // Cancel the timer to prevent memory leaks
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadGlobalWalletLimit() async {
@@ -68,7 +83,7 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
   Future<void> _loadBudgets() async {
     try {
       final db = await WalletDatabase.instance.database;
-      final result = await db.query('budgets'); // Charger tous les budgets sans filtre de source
+      final result = await db.query('budgets');
       
       double totalBudget = 0.0;
       List<Map<String, dynamic>> budgets = [];
@@ -206,106 +221,102 @@ class _WalletHomeScreenState extends State<WalletHomeScreen> {
     }
   }
 
- // Dans WalletHomeScreen, modifiez la méthode _navigateToWalletVerification
-Future<void> _navigateToWalletVerification() async {
-  print("🚀 Navigation vers WalletVerificationScreen");
-  
-  final currentTotal = _wallets.fold<double>(0, (sum, w) => sum + w.balance) + _totalBudgetAmount;
-  
-  final result = await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => WalletVerificationScreen(
-        currentTotalBalance: currentTotal,
-        globalWalletLimit: _globalWalletLimit,
-      ),
-    ),
-  );
-  
-  print("🔄 Retour de WalletVerificationScreen avec result: $result");
-  
-  // SOLUTION 1: Rechargement automatique après toute navigation
-  print("🔄 Rechargement automatique des données");
-  await _loadData();
-  
-  if (result == true && mounted) {
-    print("✅ Result est true et widget est mounted");
+  Future<void> _navigateToWalletVerification() async {
+    print("🚀 Navigation vers WalletVerificationScreen");
     
-    try {
-      // Rechargement supplémentaire pour les nouveaux portefeuilles
-      await _loadData();
+    final currentTotal = _wallets.fold<double>(0, (sum, w) => sum + w.balance) + _totalBudgetAmount;
+    
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WalletVerificationScreen(
+          currentTotalBalance: currentTotal,
+          globalWalletLimit: _globalWalletLimit,
+        ),
+      ),
+    );
+    
+    print("🔄 Retour de WalletVerificationScreen avec result: $result");
+    
+    print("🔄 Rechargement automatique des données");
+    await _loadData();
+    
+    if (result == true && mounted) {
+      print("✅ Result est true et widget est mounted");
       
-      final wallets = await WalletDatabase.instance.getWallets();
-      print("💼 Portefeuilles récupérés: ${wallets.length}");
-      
-      if (wallets.isNotEmpty) {
-        final newWallet = wallets.last;
-        print("🆕 Nouveau portefeuille: ${newWallet.name} avec balance ${newWallet.balance}");
+      try {
+        await _loadData();
         
-        final existingTransactions = await WalletDatabase.instance.getAllTransactions();
-        final walletCreationTx = existingTransactions.where(
-          (tx) => tx.description.contains('Ajout de portefeuille: ${newWallet.name}')
-        ).toList();
+        final wallets = await WalletDatabase.instance.getWallets();
+        print("💼 Portefeuilles récupérés: ${wallets.length}");
         
-        print("🔍 Transactions existantes pour ce portefeuille: ${walletCreationTx.length}");
-        
-        if (walletCreationTx.isEmpty) {
-          final transaction = Transaction(
-            type: 'income',
-            amount: newWallet.balance,
-            description: 'Ajout de portefeuille: ${newWallet.name}',
-            date: DateTime.now(),
-            source: newWallet.name,
-          );
+        if (wallets.isNotEmpty) {
+          final newWallet = wallets.last;
+          print("🆕 Nouveau portefeuille: ${newWallet.name} avec balance ${newWallet.balance}");
           
-          print("💰 Création de la transaction: ${transaction.toMap()}");
+          final existingTransactions = await WalletDatabase.instance.getAllTransactions();
+          final walletCreationTx = existingTransactions.where(
+            (tx) => tx.description.contains('Ajout de portefeuille: ${newWallet.name}')
+          ).toList();
           
-          final db = await WalletDatabase.instance.database;
-          final txMap = transaction.toMap();
-          txMap['date'] = DateTime.now().toIso8601String();
+          print("🔍 Transactions existantes pour ce portefeuille: ${walletCreationTx.length}");
           
-          print("📝 Insertion directe dans la DB: $txMap");
-          
-          final id = await db.insert('transactions', txMap);
-          print("✅ Transaction insérée avec ID: $id");
-          
-          // Rechargement final après insertion
-          await _loadData();
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Portefeuille "${newWallet.name}" ajouté avec succès !'),
-                backgroundColor: Colors.green,
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 2),
-              ),
+          if (walletCreationTx.isEmpty) {
+            final transaction = Transaction(
+              type: 'income',
+              amount: newWallet.balance,
+              description: 'Ajout de portefeuille: ${newWallet.name}',
+              date: DateTime.now(),
+              source: newWallet.name,
             );
+            
+            print("💰 Création de la transaction: ${transaction.toMap()}");
+            
+            final db = await WalletDatabase.instance.database;
+            final txMap = transaction.toMap();
+            txMap['date'] = DateTime.now().toIso8601String();
+            
+            print("📝 Insertion directe dans la DB: $txMap");
+            
+            final id = await db.insert('transactions', txMap);
+            print("✅ Transaction insérée avec ID: $id");
+            
+            await _loadData();
+            
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Portefeuille "${newWallet.name}" ajouté avec succès !'),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          } else {
+            print("⚠️ Transaction déjà existante pour ce portefeuille");
           }
         } else {
-          print("⚠️ Transaction déjà existante pour ce portefeuille");
+          print("❌ Aucun portefeuille trouvé après ajout");
         }
-      } else {
-        print("❌ Aucun portefeuille trouvé après ajout");
+      } catch (e) {
+        print("❌ Erreur dans _navigateToWalletVerification: $e");
+        print("📊 Stack trace: ${StackTrace.current}");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur lors de l\'ajout: $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
-    } catch (e) {
-      print("❌ Erreur dans _navigateToWalletVerification: $e");
-      print("📊 Stack trace: ${StackTrace.current}");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur lors de l\'ajout: $e'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+    } else {
+      print("⚠️ Result n'est pas true ou widget n'est pas mounted - result: $result, mounted: $mounted");
     }
-  } else {
-    print("⚠️ Result n'est pas true ou widget n'est pas mounted - result: $result, mounted: $mounted");
   }
-}
 
   Future<void> _deleteWallet(Wallet wallet) async {
     final confirmed = await showDialog<bool>(

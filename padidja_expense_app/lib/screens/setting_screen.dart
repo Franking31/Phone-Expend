@@ -1,10 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'dart:io';
 import 'package:padidja_expense_app/providers/theme_provider.dart';
 import 'package:padidja_expense_app/screens/user_profil_page.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
 import '../models/user_model.dart';
-import 'dart:io';
+import '../services/user_service.dart';
+
+class UserDataManager {
+  // Méthode pour récupérer l'utilisateur depuis SharedPreferences
+  static Future<Utilisateur?> getUserFromPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userData = prefs.getString('user_data');
+      final userId = prefs.getString('current_user_id');
+      
+      if (userData != null) {
+        final Map<String, dynamic> userMap = jsonDecode(userData);
+        return Utilisateur.fromMap(userMap);
+      }
+      
+      return null;
+    } catch (e) {
+      print('Erreur SharedPreferences: $e');
+      return null;
+    }
+  }
+
+  // Sauvegarder dans SharedPreferences
+  static Future<void> saveUserToPreferences(Utilisateur user) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_data', jsonEncode(user.toMap()));
+      await prefs.setString('current_user_id', user.id); // Changé de userId à id
+      print('✅ Utilisateur sauvegardé dans SharedPreferences');
+    } catch (e) {
+      print('Erreur sauvegarde SharedPreferences: $e');
+    }
+  }
+
+  // Nettoyer les données sauvegardées
+  static Future<void> clearUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('user_data');
+      await prefs.remove('current_user_id');
+      print('✅ Données utilisateur nettoyées');
+    } catch (e) {
+      print('Erreur nettoyage: $e');
+    }
+  }
+}
 
 class SettingsPage extends StatefulWidget {
   final Utilisateur utilisateur;
@@ -15,9 +63,9 @@ class SettingsPage extends StatefulWidget {
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage>
-    with TickerProviderStateMixin {
+class _SettingsPageState extends State<SettingsPage> with TickerProviderStateMixin {
   bool _pushNotifications = true;
+  bool _isLoading = true;
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late Animation<double> _fadeAnimation;
@@ -27,15 +75,26 @@ class _SettingsPageState extends State<SettingsPage>
   @override
   void initState() {
     super.initState();
+    
+    print('=== DÉBUT INITIALISATION SettingsPage ===');
+    print('Données utilisateur reçues en paramètre:');
+    print('- Nom: "${widget.utilisateur.nom}"');
+    print('- Email: "${widget.utilisateur.email}"');
+    print('- Role: "${widget.utilisateur.role}"');
+    print('- ImagePath: "${widget.utilisateur.imagePath ?? 'null'}"');
+    
     _currentUser = widget.utilisateur;
+    
+    _initializeAnimations();
+    _loadUserData();
+  }
 
-    // Animation pour le fade-in du contenu
+  void _initializeAnimations() {
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
 
-    // Animation pour le slide-up du contenu
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -57,9 +116,93 @@ class _SettingsPageState extends State<SettingsPage>
       curve: Curves.easeOutCubic,
     ));
 
-    // Démarrer les animations
     _fadeController.forward();
     _slideController.forward();
+  }
+
+  Future<void> _loadUserData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      print('🔄 Chargement des données utilisateur depuis SharedPreferences...');
+      
+      final localUser = await UserDataManager.getUserFromPreferences();
+      
+      if (localUser != null && mounted) {
+        print('✅ Utilisateur trouvé via SharedPreferences:');
+        print('- Nom: "${localUser.nom}"');
+        print('- Email: "${localUser.email}"');
+        print('- Role: "${localUser.role}"');
+        
+        setState(() {
+          _currentUser = localUser;
+        });
+      } else {
+        print('❌ Aucun utilisateur trouvé dans SharedPreferences');
+        
+        if (widget.utilisateur.nom.isNotEmpty && 
+            widget.utilisateur.email.isNotEmpty) {
+          print('✅ Utilisation des données du widget (fallback):');
+          print('- Nom: "${widget.utilisateur.nom}"');
+          print('- Email: "${widget.utilisateur.email}"');
+          
+          setState(() {
+            _currentUser = widget.utilisateur;
+          });
+          
+          await UserDataManager.saveUserToPreferences(widget.utilisateur);
+        } else {
+          print('❌ Données du widget invalides');
+          _showNoUserDialog();
+        }
+      }
+      
+    } catch (e) {
+      print('❌ Erreur lors du chargement: $e');
+      if (widget.utilisateur.nom.isNotEmpty && 
+          widget.utilisateur.email.isNotEmpty && mounted) {
+        setState(() {
+          _currentUser = widget.utilisateur;
+        });
+      } else {
+        _showNoUserDialog();
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+      print('=== FIN CHARGEMENT ===');
+      print('Données finales:');
+      print('- Nom: "${_currentUser.nom}"');
+      print('- Email: "${_currentUser.email}"');
+      print('- Role: "${_currentUser.role}"');
+    }
+  }
+
+  void _showNoUserDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Session expirée'),
+        content: const Text(
+          'Impossible de récupérer vos données utilisateur. '
+          'Veuillez vous reconnecter.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pushReplacementNamed('/login');
+            },
+            child: const Text('Se reconnecter'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -69,7 +212,6 @@ class _SettingsPageState extends State<SettingsPage>
     super.dispose();
   }
 
-  // Method to navigate to EditProfilePage and handle the returned user
   Future<void> _navigateToEditProfile() async {
     final updatedUser = await Navigator.push(
       context,
@@ -78,11 +220,16 @@ class _SettingsPageState extends State<SettingsPage>
       ),
     );
 
-    // Update the current user if the EditProfilePage returns an updated user
-    if (updatedUser != null && updatedUser is Utilisateur) {
+    if (updatedUser != null && updatedUser is Utilisateur && mounted) {
+      print('✅ Utilisateur mis à jour:');
+      print('- Nouveau nom: "${updatedUser.nom}"');
+      print('- Nouveau email: "${updatedUser.email}"');
+      
       setState(() {
         _currentUser = updatedUser;
       });
+      
+      await UserDataManager.saveUserToPreferences(updatedUser);
     }
   }
 
@@ -106,7 +253,6 @@ class _SettingsPageState extends State<SettingsPage>
           child: SafeArea(
             child: Column(
               children: [
-                // Header animé
                 FadeTransition(
                   opacity: _fadeAnimation,
                   child: Padding(
@@ -130,7 +276,7 @@ class _SettingsPageState extends State<SettingsPage>
                         ),
                         const SizedBox(width: 12),
                         const Text(
-                          'Settings',
+                          'Paramètres',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 24,
@@ -142,7 +288,6 @@ class _SettingsPageState extends State<SettingsPage>
                   ),
                 ),
 
-                // Main content avec animation
                 Expanded(
                   child: SlideTransition(
                     position: _slideAnimation,
@@ -157,130 +302,117 @@ class _SettingsPageState extends State<SettingsPage>
                             topRight: Radius.circular(30),
                           ),
                         ),
-                        child: CustomScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          slivers: [
-                            SliverPadding(
-                              padding: const EdgeInsets.all(20),
-                              sliver: SliverList(
-                                delegate: SliverChildListDelegate([
-                                  // Profile Section avec animation retardée
-                                  TweenAnimationBuilder<double>(
-                                    tween: Tween(begin: 0.0, end: 1.0),
-                                    duration: const Duration(milliseconds: 1000),
-                                    builder: (context, value, child) {
-                                      return Transform.translate(
-                                        offset: Offset(0, 20 * (1 - value)),
-                                        child: Opacity(
-                                          opacity: value,
-                                          child: _buildProfileSection(isDarkMode),
+                        child: _isLoading
+                            ? _buildLoadingIndicator()
+                            : CustomScrollView(
+                                physics: const BouncingScrollPhysics(),
+                                slivers: [
+                                  SliverPadding(
+                                    padding: const EdgeInsets.all(20),
+                                    sliver: SliverList(
+                                      delegate: SliverChildListDelegate([
+                                        _buildProfileSection(isDarkMode),
+                                        const SizedBox(height: 30),
+                                        _buildAnimatedSection(
+                                          'Paramètres du compte',
+                                          [
+                                            _buildAnimatedSettingsItem(
+                                              icon: Icons.person_outline_rounded,
+                                              title: 'Modifier le profil',
+                                              onTap: _navigateToEditProfile,
+                                              showArrow: true,
+                                              delay: 200,
+                                              isDarkMode: isDarkMode,
+                                            ),
+                                            _buildAnimatedSettingsItem(
+                                              icon: Icons.lock_outline_rounded,
+                                              title: 'Changer le mot de passe',
+                                              onTap: () {},
+                                              showArrow: true,
+                                              delay: 300,
+                                              isDarkMode: isDarkMode,
+                                            ),
+                                            _buildAnimatedSettingsItem(
+                                              icon: Icons.notifications_outlined,
+                                              title: 'Notifications push',
+                                              onTap: () {},
+                                              trailing: AnimatedSwitcher(
+                                                duration: const Duration(milliseconds: 300),
+                                                child: Switch(
+                                                  key: ValueKey(_pushNotifications),
+                                                  value: _pushNotifications,
+                                                  onChanged: (value) {
+                                                    setState(() {
+                                                      _pushNotifications = value;
+                                                    });
+                                                  },
+                                                  activeColor: const Color(0xFF6074F9),
+                                                  activeTrackColor: const Color(0xFF6074F9).withValues(alpha: 0.3),
+                                                ),
+                                              ),
+                                              delay: 400,
+                                              isDarkMode: isDarkMode,
+                                            ),
+                                            _buildAnimatedSettingsItem(
+                                              icon: isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                                              title: 'Mode sombre',
+                                              onTap: () {},
+                                              trailing: AnimatedSwitcher(
+                                                duration: const Duration(milliseconds: 300),
+                                                child: Switch(
+                                                  key: ValueKey(isDarkMode),
+                                                  value: isDarkMode,
+                                                  onChanged: (value) {
+                                                    themeProvider.toggleTheme();
+                                                  },
+                                                  activeColor: const Color(0xFF6074F9),
+                                                  activeTrackColor: const Color(0xFF6074F9).withValues(alpha: 0.3),
+                                                ),
+                                              ),
+                                              delay: 500,
+                                              isDarkMode: isDarkMode,
+                                            ),
+                                          ],
+                                          isDarkMode: isDarkMode,
                                         ),
-                                      );
-                                    },
-                                  ),
-
-                                  const SizedBox(height: 30),
-
-                                  // Account Settings Section
-                                  _buildAnimatedSection(
-                                    'Account Settings',
-                                    [
-                                      _buildAnimatedSettingsItem(
-                                        icon: Icons.person_outline_rounded,
-                                        title: 'Edit profile',
-                                        onTap: _navigateToEditProfile,
-                                        showArrow: true,
-                                        delay: 200,
-                                        isDarkMode: isDarkMode,
-                                      ),
-                                      _buildAnimatedSettingsItem(
-                                        icon: Icons.lock_outline_rounded,
-                                        title: 'Change password',
-                                        onTap: () {},
-                                        showArrow: true,
-                                        delay: 300,
-                                        isDarkMode: isDarkMode,
-                                      ),
-                                      _buildAnimatedSettingsItem(
-                                        icon: Icons.notifications_outlined,
-                                        title: 'Push notifications',
-                                        onTap: () {},
-                                        trailing: AnimatedSwitcher(
-                                          duration: const Duration(milliseconds: 300),
-                                          child: Switch(
-                                            key: ValueKey(_pushNotifications),
-                                            value: _pushNotifications,
-                                            onChanged: (value) {
-                                              setState(() {
-                                                _pushNotifications = value;
-                                              });
-                                            },
-                                            activeColor: const Color(0xFF6074F9),
-                                            activeTrackColor: const Color(0xFF6074F9)
-                                                .withValues(alpha: 0.3),
-                                          ),
+                                        const SizedBox(height: 30),
+                                        _buildAnimatedSection(
+                                          'Plus d\'options',
+                                          [
+                                            _buildAnimatedSettingsItem(
+                                              icon: Icons.info_outline_rounded,
+                                              title: 'À propos de nous',
+                                              onTap: () {},
+                                              showArrow: true,
+                                              delay: 600,
+                                              isDarkMode: isDarkMode,
+                                            ),
+                                            _buildAnimatedSettingsItem(
+                                              icon: Icons.privacy_tip_outlined,
+                                              title: 'Politique de confidentialité',
+                                              onTap: () {},
+                                              showArrow: true,
+                                              delay: 700,
+                                              isDarkMode: isDarkMode,
+                                            ),
+                                            _buildAnimatedSettingsItem(
+                                              icon: Icons.logout_rounded,
+                                              title: 'Se déconnecter',
+                                              onTap: _showLogoutDialog,
+                                              showArrow: true,
+                                              delay: 800,
+                                              isDarkMode: isDarkMode,
+                                              isDestructive: true,
+                                            ),
+                                          ],
+                                          isDarkMode: isDarkMode,
                                         ),
-                                        delay: 400,
-                                        isDarkMode: isDarkMode,
-                                      ),
-                                      _buildAnimatedSettingsItem(
-                                        icon: isDarkMode
-                                            ? Icons.light_mode_outlined
-                                            : Icons.dark_mode_outlined,
-                                        title: 'Dark mode',
-                                        onTap: () {},
-                                        trailing: AnimatedSwitcher(
-                                          duration: const Duration(milliseconds: 300),
-                                          child: Switch(
-                                            key: ValueKey(isDarkMode),
-                                            value: isDarkMode,
-                                            onChanged: (value) {
-                                              themeProvider.toggleTheme();
-                                            },
-                                            activeColor: const Color(0xFF6074F9),
-                                            activeTrackColor: const Color(0xFF6074F9)
-                                                .withValues(alpha: 0.3),
-                                          ),
-                                        ),
-                                        delay: 500,
-                                        isDarkMode: isDarkMode,
-                                      ),
-                                    ],
-                                    isDarkMode: isDarkMode,
+                                        const SizedBox(height: 20),
+                                      ]),
+                                    ),
                                   ),
-
-                                  const SizedBox(height: 30),
-
-                                  // More Section
-                                  _buildAnimatedSection(
-                                    'More',
-                                    [
-                                      _buildAnimatedSettingsItem(
-                                        icon: Icons.info_outline_rounded,
-                                        title: 'About us',
-                                        onTap: () {},
-                                        showArrow: true,
-                                        delay: 600,
-                                        isDarkMode: isDarkMode,
-                                      ),
-                                      _buildAnimatedSettingsItem(
-                                        icon: Icons.privacy_tip_outlined,
-                                        title: 'Privacy policy',
-                                        onTap: () {},
-                                        showArrow: true,
-                                        delay: 700,
-                                        isDarkMode: isDarkMode,
-                                      ),
-                                    ],
-                                    isDarkMode: isDarkMode,
-                                  ),
-
-                                  const SizedBox(height: 20),
-                                ]),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                   ),
@@ -293,7 +425,33 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
+  Widget _buildLoadingIndicator() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(50.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6074F9)),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Chargement des informations...',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildProfileSection(bool isDarkMode) {
+    print('=== AFFICHAGE PROFIL ===');
+    print('Nom à afficher: "${_currentUser.nom}"');
+    print('Email à afficher: "${_currentUser.email}"');
+    print('Role à afficher: "${_currentUser.role}"');
+    
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -305,9 +463,7 @@ class _SettingsPageState extends State<SettingsPage>
         ),
         boxShadow: [
           BoxShadow(
-            color: isDarkMode
-                ? Colors.black.withValues(alpha: 0.3)
-                : Colors.black.withValues(alpha: 0.05),
+            color: isDarkMode ? Colors.black.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -323,10 +479,7 @@ class _SettingsPageState extends State<SettingsPage>
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(30),
                 gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF6074F9),
-                    Color(0xFF5A6BF2),
-                  ],
+                  colors: [Color(0xFF6074F9), Color(0xFF5A6BF2)],
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -336,8 +489,9 @@ class _SettingsPageState extends State<SettingsPage>
                   ),
                 ],
               ),
-              child: _currentUser.imagePath != null &&
-                      File(_currentUser.imagePath!).existsSync()
+              child: _currentUser.imagePath != null && 
+                     _currentUser.imagePath!.isNotEmpty && 
+                     File(_currentUser.imagePath!).existsSync()
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(30),
                       child: Image.file(
@@ -358,7 +512,7 @@ class _SettingsPageState extends State<SettingsPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _currentUser.nom,
+                  _currentUser.nom.trim().isNotEmpty ? _currentUser.nom.trim() : 'Nom non disponible',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -367,14 +521,41 @@ class _SettingsPageState extends State<SettingsPage>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _currentUser.email,
+                  _currentUser.email.trim().isNotEmpty ? _currentUser.email.trim() : 'Email non disponible',
                   style: TextStyle(
                     fontSize: 14,
-                    color: isDarkMode ? Colors.grey[400] : Colors.grey,
+                    color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6074F9).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _currentUser.role.trim().isNotEmpty ? _currentUser.role.toUpperCase() : 'ROLE INCONNU',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF6074F9),
+                    ),
                   ),
                 ),
               ],
             ),
+          ),
+          IconButton(
+            onPressed: () {
+              print('=== ACTUALISATION MANUELLE ===');
+              _loadUserData();
+            },
+            icon: Icon(
+              Icons.refresh_rounded,
+              color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+            ),
+            tooltip: 'Actualiser les informations',
           ),
         ],
       ),
@@ -409,6 +590,7 @@ class _SettingsPageState extends State<SettingsPage>
     Widget? trailing,
     int delay = 0,
     bool isDarkMode = false,
+    bool isDestructive = false,
   }) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -426,6 +608,7 @@ class _SettingsPageState extends State<SettingsPage>
               showArrow: showArrow,
               trailing: trailing,
               isDarkMode: isDarkMode,
+              isDestructive: isDestructive,
             ),
           ),
         );
@@ -451,7 +634,13 @@ class _SettingsPageState extends State<SettingsPage>
     bool showArrow = false,
     Widget? trailing,
     bool isDarkMode = false,
+    bool isDestructive = false,
   }) {
+    final Color iconColor = isDestructive ? Colors.red : const Color(0xFF6074F9);
+    final Color textColor = isDestructive 
+        ? Colors.red 
+        : (isDarkMode ? Colors.white : Colors.black87);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -459,8 +648,8 @@ class _SettingsPageState extends State<SettingsPage>
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
-          splashColor: const Color(0xFF6074F9).withValues(alpha: 0.1),
-          highlightColor: const Color(0xFF6074F9).withValues(alpha: 0.05),
+          splashColor: iconColor.withValues(alpha: 0.1),
+          highlightColor: iconColor.withValues(alpha: 0.05),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -473,9 +662,7 @@ class _SettingsPageState extends State<SettingsPage>
               ),
               boxShadow: [
                 BoxShadow(
-                  color: isDarkMode
-                      ? Colors.black.withValues(alpha: 0.1)
-                      : Colors.black.withValues(alpha: 0.02),
+                  color: isDarkMode ? Colors.black.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.02),
                   blurRadius: 4,
                   offset: const Offset(0, 1),
                 ),
@@ -488,7 +675,7 @@ class _SettingsPageState extends State<SettingsPage>
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6074F9).withValues(alpha: 0.1),
+                    color: iconColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: TweenAnimationBuilder<double>(
@@ -499,7 +686,7 @@ class _SettingsPageState extends State<SettingsPage>
                         scale: scale,
                         child: Icon(
                           icon,
-                          color: const Color(0xFF6074F9),
+                          color: iconColor,
                           size: 20,
                         ),
                       );
@@ -513,7 +700,7 @@ class _SettingsPageState extends State<SettingsPage>
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
-                      color: isDarkMode ? Colors.white : Colors.black87,
+                      color: textColor,
                     ),
                   ),
                 ),
@@ -541,6 +728,47 @@ class _SettingsPageState extends State<SettingsPage>
           ),
         ),
       ),
+    );
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Se déconnecter'),
+          content: const Text('Êtes-vous sûr de vouloir vous déconnecter ?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                try {
+                  await UserDataManager.clearUserData();
+                  await UserService.deconnexion();
+                  if (mounted) {
+                    Navigator.of(context).pushReplacementNamed('/login');
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Erreur lors de la déconnexion: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Se déconnecter'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

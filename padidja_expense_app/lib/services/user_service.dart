@@ -50,6 +50,7 @@ class ErrorDisplayService {
     }
   }
   
+  
   static void showSuccess(String message) {
     final context = navigatorKey.currentContext;
     if (context != null) {

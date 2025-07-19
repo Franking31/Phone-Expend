@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/wallet.dart';
 import '../models/transaction.dart' as trans;
 
-
 class WalletDatabase {
   static final WalletDatabase instance = WalletDatabase._init();
   static Database? _database;
@@ -40,22 +39,24 @@ class WalletDatabase {
   Future<Database> _initDB(String fileName) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, fileName);
-    return await openDatabase(path, version: 5, onCreate: _createDB, onUpgrade: _onUpgrade);
+    return await openDatabase(path, version: 6, onCreate: _createDB, onUpgrade: _onUpgrade);
   }
 
   Future _createDB(Database db, int version) async {
     await db.execute('''
       CREATE TABLE wallets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
         name TEXT NOT NULL,
         balance REAL NOT NULL,
-        expenseLimit REAL DEFAULT 0.0
+        expense_limit REAL DEFAULT 0.0
       )
     ''');
     
     await db.execute('''
       CREATE TABLE budgets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
         source TEXT NOT NULL,
         category TEXT NOT NULL,
         amount REAL NOT NULL,
@@ -63,7 +64,7 @@ class WalletDatabase {
         nom TEXT,
         description TEXT,
         justificatif TEXT,
-        pieceJointe TEXT,
+        piece_jointe TEXT,
         date TEXT
       )
     ''');
@@ -71,6 +72,7 @@ class WalletDatabase {
     await db.execute('''
       CREATE TABLE transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
         type TEXT NOT NULL,
         source TEXT NOT NULL,
         amount REAL NOT NULL,
@@ -78,7 +80,6 @@ class WalletDatabase {
         date TEXT NOT NULL
       )
     ''');
-    
     _logInfo('Database tables created successfully');
   }
 
@@ -87,12 +88,12 @@ class WalletDatabase {
     
     if (oldVersion < 2) {
       final tableInfo = await db.rawQuery("PRAGMA table_info(wallets)");
-      final columnExists = tableInfo.any((column) => column['name'] == 'expenseLimit');
+      final columnExists = tableInfo.any((column) => column['name'] == 'expense_limit');
       if (!columnExists) {
-        await db.execute('ALTER TABLE wallets ADD COLUMN expenseLimit REAL DEFAULT 0.0');
-        _logInfo('Column expenseLimit added successfully');
+        await db.execute('ALTER TABLE wallets ADD COLUMN expense_limit REAL DEFAULT 0.0');
+        _logInfo('Column expense_limit added successfully');
       } else {
-        _logWarning('Column expenseLimit already exists, skipping migration');
+        _logWarning('Column expense_limit already exists, skipping migration');
       }
     }
     
@@ -102,6 +103,7 @@ class WalletDatabase {
         await db.execute('''
           CREATE TABLE budgets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
             source TEXT NOT NULL,
             category TEXT NOT NULL,
             amount REAL NOT NULL,
@@ -122,8 +124,9 @@ class WalletDatabase {
         'nom TEXT',
         'description TEXT', 
         'justificatif TEXT',
-        'pieceJointe TEXT',
-        'date TEXT'
+        'piece_jointe TEXT',
+        'date TEXT',
+        'user_id TEXT'
       ];
       
       for (String columnDef in columnsToAdd) {
@@ -143,6 +146,7 @@ class WalletDatabase {
         await db.execute('''
           CREATE TABLE transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT,
             type TEXT NOT NULL,
             source TEXT NOT NULL,
             amount REAL NOT NULL,
@@ -153,6 +157,29 @@ class WalletDatabase {
         _logInfo('Transactions table created successfully');
       } else {
         _logWarning('Transactions table already exists, skipping creation');
+      }
+    }
+
+    if (oldVersion < 6) {
+      final tableInfoWallets = await db.rawQuery("PRAGMA table_info(wallets)");
+      final existingColumnsWallets = tableInfoWallets.map((col) => col['name'] as String).toSet();
+      if (!existingColumnsWallets.contains('user_id')) {
+        await db.execute('ALTER TABLE wallets ADD COLUMN user_id TEXT');
+        _logInfo('Column user_id added successfully to wallets table');
+      }
+
+      final tableInfoBudgets = await db.rawQuery("PRAGMA table_info(budgets)");
+      final existingColumnsBudgets = tableInfoBudgets.map((col) => col['name'] as String).toSet();
+      if (!existingColumnsBudgets.contains('user_id')) {
+        await db.execute('ALTER TABLE budgets ADD COLUMN user_id TEXT');
+        _logInfo('Column user_id added successfully to budgets table');
+      }
+
+      final tableInfoTransactions = await db.rawQuery("PRAGMA table_info(transactions)");
+      final existingColumnsTransactions = tableInfoTransactions.map((col) => col['name'] as String).toSet();
+      if (!existingColumnsTransactions.contains('user_id')) {
+        await db.execute('ALTER TABLE transactions ADD COLUMN user_id TEXT');
+        _logInfo('Column user_id added successfully to transactions table');
       }
     }
   }
@@ -167,6 +194,11 @@ class WalletDatabase {
     final supabase = Supabase.instance.client;
     final userId = await _getCurrentUserId();
 
+    if (userId == null) {
+      _logError('No user logged in');
+      throw Exception('Aucun utilisateur connecté');
+    }
+
     try {
       final existingWallets = await db.query(
         'wallets',
@@ -180,18 +212,23 @@ class WalletDatabase {
       }
 
       // Insert locally
-      final walletId = await db.insert('wallets', wallet.toMap());
+      final walletId = await db.insert('wallets', {
+        'user_id': userId,
+        'name': wallet.name,
+        'balance': wallet.balance,
+        'expense_limit': wallet.expenseLimit,
+      });
+      _logInfo('Wallet inserted locally with ID: $walletId');
 
-      // Insert in Supabase only if userId is not null
-      if (userId != null) {
-        await supabase.from('wallets').insert({
-          ...wallet.toMap(),
-          'user_id': userId,
-          'expense_limit': wallet.expenseLimit,
-        });
-      }
-
-      _logInfo('Wallet inserted with ID: $walletId');
+      // Insert in Supabase
+      await supabase.from('wallets').insert({
+        'id': walletId.toString(),
+        'user_id': userId, // Utiliser legacy_user_id si nécessaire, sinon user_id temporaire
+        'name': wallet.name,
+        'balance': wallet.balance,
+        'expense_limit': wallet.expenseLimit,
+      });
+      _logInfo('Wallet inserted in Supabase with ID: $walletId');
 
       final walletWithId = Wallet(
         id: walletId,
@@ -201,21 +238,19 @@ class WalletDatabase {
       );
       await createWalletAdditionTransaction(walletWithId);
 
-      // Insert transaction in Supabase only if userId is not null
-      if (userId != null) {
-        await supabase.from('transactions').insert({
-          'type': 'income',
-          'source': wallet.name,
-          'amount': wallet.balance,
-          'description': 'Ajout de portefeuille: ${wallet.name} (ID: $walletId)',
-          'date': DateTime.now().toIso8601String(),
-          'user_id': userId,
-        });
-      }
+      // Insert transaction in Supabase
+      await supabase.from('transactions').insert({
+        'type': 'income',
+        'source': wallet.name,
+        'amount': wallet.balance,
+        'description': 'Ajout de portefeuille: ${wallet.name} (ID: $walletId)',
+        'date': DateTime.now().toIso8601String(),
+        'user_id': userId,
+      });
 
       _logInfo('Wallet and transaction inserted successfully');
     } catch (e) {
-      _logError('Error inserting wallet', e);
+      _logError('Error inserting wallet: $e');
       rethrow;
     }
   }
@@ -238,7 +273,12 @@ class WalletDatabase {
       _logDebug('Updating wallet with ID: ${wallet.id}');
       final rowsAffected = await db.update(
         'wallets',
-        wallet.toMap(),
+        {
+          'user_id': wallet.id.toString(), // À ajuster selon votre modèle Wallet
+          'name': wallet.name,
+          'balance': wallet.balance,
+          'expense_limit': wallet.expenseLimit,
+        },
         where: 'id = ?',
         whereArgs: [wallet.id],
       );
@@ -272,7 +312,7 @@ class WalletDatabase {
 
       await db.update(
         'wallets',
-        {'expenseLimit': newExpenseLimit},
+        {'expense_limit': newExpenseLimit},
         where: 'id = ?',
         whereArgs: [walletId],
       );
@@ -294,6 +334,14 @@ class WalletDatabase {
         txMap['date'] = (txMap['date'] as DateTime).toIso8601String();
       }
       
+      final userId = await _getCurrentUserId();
+      if (userId == null) {
+        _logError('No user logged in');
+        throw Exception('Aucun utilisateur connecté');
+      }
+
+      txMap['user_id'] = userId;
+      
       final id = await db.insert('transactions', txMap,
           conflictAlgorithm: ConflictAlgorithm.replace);
       _logInfo('Transaction inserted with ID: $id (without balance update)');
@@ -308,6 +356,11 @@ class WalletDatabase {
     final supabase = Supabase.instance.client;
     final userId = await _getCurrentUserId();
 
+    if (userId == null) {
+      _logError('No user logged in');
+      throw Exception('Aucun utilisateur connecté');
+    }
+
     try {
       final txMap = tx.toMap();
       if (txMap['date'] is DateTime) {
@@ -315,21 +368,27 @@ class WalletDatabase {
       }
 
       // Insert locally
-      final id = await db.insert('transactions', txMap,
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      final id = await db.insert('transactions', {
+        ...txMap,
+        'user_id': userId,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      _logInfo('Transaction inserted locally with ID: $id');
 
-      // Insert in Supabase only if userId is not null
-      if (userId != null) {
-        await supabase.from('transactions').insert({
-          ...txMap,
-          'user_id': userId,
-        });
-      }
+      // Insert in Supabase
+      await supabase.from('transactions').insert({
+        'id': id.toString(),
+        'user_id': userId,
+        'type': txMap['type'],
+        'source': txMap['source'],
+        'amount': txMap['amount'],
+        'description': txMap['description'],
+        'date': txMap['date'],
+      });
+      _logInfo('Transaction inserted in Supabase with ID: $id');
 
-      _logInfo('Transaction inserted with ID: $id');
       await _updateWalletBalance(tx);
     } catch (e) {
-      _logError('Error inserting transaction', e);
+      _logError('Error inserting transaction: $e');
       rethrow;
     }
   }
@@ -459,7 +518,7 @@ class WalletDatabase {
 
         // Delete from Supabase only if userId is not null
         if (userId != null) {
-          await supabase.from('wallets').delete().eq('id', id).eq('user_id', userId);
+          await supabase.from('wallets').delete().eq('id', id.toString()).eq('user_id', userId);
         }
 
         _logInfo('Wallet deleted successfully (ID: $id)');
@@ -477,21 +536,36 @@ class WalletDatabase {
     final supabase = Supabase.instance.client;
     final userId = await _getCurrentUserId();
 
+    if (userId == null) {
+      _logError('No user logged in');
+      throw Exception('Aucun utilisateur connecté');
+    }
+
     try {
       // Insert locally
-      await db.insert('budgets', budget);
+      final budgetId = await db.insert('budgets', {
+        ...budget,
+        'user_id': userId,
+      });
+      _logInfo('Budget inserted locally with ID: $budgetId');
 
-      // Insert in Supabase only if userId is not null
-      if (userId != null) {
-        await supabase.from('budgets').insert({
-          ...budget,
-          'user_id': userId,
-        });
-      }
-
-      _logInfo('Budget inserted locally and in Supabase');
+      // Insert in Supabase
+      await supabase.from('budgets').insert({
+        'id': budgetId.toString(),
+        'user_id': userId,
+        'source': budget['source'],
+        'category': budget['category'],
+        'amount': budget['amount'],
+        'spent': budget['spent'],
+        'nom': budget['nom'],
+        'description': budget['description'],
+        'justificatif': budget['justificatif'],
+        'piece_jointe': budget['piece_jointe'],
+        'date': budget['date'],
+      });
+      _logInfo('Budget inserted in Supabase with ID: $budgetId');
     } catch (e) {
-      _logError('Error inserting budget', e);
+      _logError('Error inserting budget: $e');
       rethrow;
     }
   }
@@ -499,8 +573,37 @@ class WalletDatabase {
   Future<void> updateBudget(int id, Map<String, dynamic> budget) async {
     final db = await instance.database;
     try {
-      await db.update('budgets', budget, where: 'id = ?', whereArgs: [id]);
-      _logInfo('Budget updated successfully (ID: $id)');
+      final userId = await _getCurrentUserId();
+      if (userId == null) {
+        _logError('No user logged in');
+        throw Exception('Aucun utilisateur connecté');
+      }
+
+      _logDebug('Updating budget with ID: $id');
+      final rowsAffected = await db.update(
+        'budgets',
+        {
+          'user_id': userId,
+          'source': budget['source'],
+          'category': budget['category'],
+          'amount': budget['amount'],
+          'spent': budget['spent'],
+          'nom': budget['nom'],
+          'description': budget['description'],
+          'justificatif': budget['justificatif'],
+          'piece_jointe': budget['piece_jointe'],
+          'date': budget['date'],
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      
+      if (rowsAffected == 0) {
+        _logWarning('No budget updated with ID: $id');
+        throw Exception("Aucun budget trouvé avec l'ID spécifié");
+      }
+      
+      _logInfo('Budget updated successfully (ID: $id, Rows affected: $rowsAffected)');
     } catch (e) {
       _logError('Error updating budget', e);
       rethrow;
@@ -551,7 +654,14 @@ class WalletDatabase {
       
       _logDebug('Creating transaction for ${wallet.name} (ID: ${wallet.id})');
       
+      final userId = await _getCurrentUserId();
+      if (userId == null) {
+        _logError('No user logged in');
+        throw Exception('Aucun utilisateur connecté');
+      }
+
       final transaction = {
+        'user_id': userId,
         'type': 'income',
         'source': transactionSource,
         'amount': wallet.balance,
@@ -615,7 +725,7 @@ class WalletDatabase {
       
       _logInfo('WALLETS:');
       for (var wallet in wallets) {
-        _logInfo('  - ID: ${wallet['id']}, Name: ${wallet['name']}, Balance: ${wallet['balance']}, Limit: ${wallet['expenseLimit']}');
+        _logInfo('  - ID: ${wallet['id']}, Name: ${wallet['name']}, Balance: ${wallet['balance']}, Limit: ${wallet['expense_limit']}');
       }
       
       _logInfo('TRANSACTIONS:');
