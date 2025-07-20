@@ -89,7 +89,7 @@ class _WalletVerificationScreenState extends State<WalletVerificationScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Choisissez votre source de dépense',
+                'Choisissez votre source de revenu',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),

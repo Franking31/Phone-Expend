@@ -1,6 +1,7 @@
 // ignore_for_file: unused_local_variable
 
 import 'package:flutter/material.dart';
+import 'package:padidja_expense_app/screens/spend_line_detail_page.dart';
 import 'package:padidja_expense_app/widgets/main_drawer_wrapper.dart';
 import 'package:padidja_expense_app/widgets/notification_button.dart';
 import 'add_expense_screen.dart';
@@ -25,6 +26,11 @@ class _SpendLinePageState extends State<SpendLinePage> with TickerProviderStateM
   String _currentSortOption = 'None';
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+
+  // Calculer le total des budgets
+  double get totalBudget {
+    return _filteredSpendLines.fold(0.0, (sum, line) => sum + line.budget);
+  }
 
   @override
   void initState() {
@@ -360,6 +366,61 @@ ${line.proof.isNotEmpty ? '- Proof: ${line.proof.split('/').last}' : ''}
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
+                        // Card avec total des dépenses
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          margin: const EdgeInsets.only(bottom: 20),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Color(0xFF6074F9),
+                                Color(0xFF5A67D8),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF6074F9).withOpacity(0.3),
+                                spreadRadius: 1,
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              const Text(
+                                'Total Budget',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '${totalBudget.toStringAsFixed(2)} FCFA',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${_filteredSpendLines.length} lignes budgétaires',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
                         // Bouton ADD
                         SizedBox(
                           width: 120,
@@ -517,36 +578,48 @@ ${line.proof.isNotEmpty ? '- Proof: ${line.proof.split('/').last}' : ''}
   }
 
   Widget _buildSpendLineItem(SpendLine line) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFF6074F9).withOpacity(0.2),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.08),
-            spreadRadius: 1,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+  return Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(
+        color: const Color(0xFF6074F9).withOpacity(0.2),
+        width: 1,
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            // Navigation vers les détails si nécessaire
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                // Icône
-                Container(
+      boxShadow: [
+        BoxShadow(
+          color: Colors.grey.withOpacity(0.08),
+          spreadRadius: 1,
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          // Navigation vers les détails - MODIFIÉ ICI
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SpendLineDetailPage(
+                spendLine: line,
+                primaryColor: const Color(0xFF6074F9),
+                heroTag: 'spendline_${line.id ?? 'default'}', // Hero tag unique
+              ),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Hero widget pour l'animation - AJOUTÉ
+              Hero(
+                tag: 'spendline_${line.id ?? 'default'}',
+                child: Container(
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
@@ -559,81 +632,82 @@ ${line.proof.isNotEmpty ? '- Proof: ${line.proof.split('/').last}' : ''}
                     size: 20,
                   ),
                 ),
-                const SizedBox(width: 16),
-                // Texte
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              ),
+              const SizedBox(width: 16),
+              // Texte
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      line.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Budget: ${line.budget.toStringAsFixed(2)} FCFA',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    if (line.description.isNotEmpty) ...[
+                      const SizedBox(height: 2),
                       Text(
-                        line.name,
+                        line.description,
                         style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black87,
+                          fontSize: 12,
+                          color: Colors.grey,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Budget: ${line.budget.toStringAsFixed(2)} FCFA',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      if (line.description.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          line.description,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
                     ],
-                  ),
-                ),
-                // Actions
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit, color: Color(0xFF6074F9)),
-                      onPressed: () async {
-                        final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => EditSpendLineScreen(spendLine: line),
-                          ),
-                        );
-                        // Recharger la liste si des modifications ont été effectuées
-                        if (result == true) {
-                          _loadSpendLines();
-                        }
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.share, color: Color(0xFF6074F9)),
-                      onPressed: () => _shareSpendLine(line),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _showDeleteDialog(line),
-                    ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              // Actions
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: Color(0xFF6074F9)),
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => EditSpendLineScreen(spendLine: line),
+                        ),
+                      );
+                      // Recharger la liste si des modifications ont été effectuées
+                      if (result == true) {
+                        _loadSpendLines();
+                      }
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.share, color: Color(0xFF6074F9)),
+                    onPressed: () => _shareSpendLine(line),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _showDeleteDialog(line),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   @override
   void dispose() {
